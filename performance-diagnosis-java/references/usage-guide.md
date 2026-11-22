@@ -31,7 +31,7 @@ scripts/check-local-ssh.sh
 scripts/list-ssh-servers.sh
 ```
 
-`list-ssh-servers.sh` 会对 SSH config 中的普通 Host alias 使用 BatchMode 和 5 秒超时做密钥认证检查。未通过可能表示需要交互式密码，也可能表示连接不可用；不要仅凭此结果判定服务器不可达，也不要关闭 Host Key 校验。
+`list-ssh-servers.sh` 只解析本地 SSH 配置，不连接任何服务器，所以列表状态是“未测试”。只有你选择某台服务器后才建立连接；需要密码时，在本地 OpenSSH 提示符输入。
 
 如果尚未配置服务器，Agent 提供两种方式，最终都会把配置记录到本机 `~/.ssh/config`：
 
@@ -58,7 +58,7 @@ Agent：使用密码登录还是 SSH key？密码只在本机终端输入。
 !bash ~/.claude/skills/performance-diagnosis-java/scripts/setup-ssh-server.sh --alias beta --host 10.20.1.15 --user deploy --port 22 --auth password
 ```
 
-脚本检查 alias 未重复后，将新 Host 块追加到本机 `~/.ssh/config`，保留既有配置并设置文件权限为 `600`。旧版本留下的同名片段会保留，但不会阻止写入。完成后 alias 会被服务器列表脚本发现。密码只输入 OpenSSH 本地提示符，不提供给 Agent；若 Agent shell 没有 TTY，在你自己的终端运行脚本输出的 `ssh beta true`。密码模式自动配置短期 SSH 连接复用，后续诊断命令不必重复输入密码；结束后关闭本次连接。密钥模式可用 `--auth key --public-key ~/.ssh/id_ed25519.pub`；脚本只展示公钥，不上传，也不读取私钥内容。
+脚本检查 alias 未重复及 `Host *` 冲突后，将新 Host 块追加到本机 `~/.ssh/config`，保留既有配置并设置文件权限为 `600`，随后用 `ssh -G` 校验有效值。旧版本留下的同名片段会保留，但不会阻止写入。完成后 alias 会被服务器列表脚本发现。密码只输入 OpenSSH 本地提示符，不提供给 Agent；若 Agent shell 没有 TTY，在你自己的终端运行脚本输出的 `ssh beta true`。新建密码 alias 会配置短期 SSH 连接复用；结束后关闭本次连接。密钥模式可用 `--auth key --public-key ~/.ssh/id_ed25519.pub`；脚本只展示公钥，不上传，也不读取私钥内容。
 
 如果直接在本地终端运行（有 TTY），也可不传参数启动向导：
 
@@ -90,12 +90,10 @@ bash ~/.claude/skills/performance-diagnosis-java/scripts/setup-ssh-server.sh
 
 Agent 应列出本机 `~/.ssh/config` 中的目标，即使 Host 是 IP 也要作为可选项，例如：
 
-| Alias | Host | User | Port | 连通状态 |
-|---|---|---|---:|---|
 | 选项 | Alias | Host | User | Port | 状态 |
 |---:|---|---|---|---:|---|
-| 1 | beta | 10.20.1.15 | deploy | 22 | 密钥可连接 |
-| 2 | staging | 10.20.2.18 | ops | 2222 | 需要交互认证或暂不可达 |
+| 1 | beta | 10.20.1.15 | deploy | 22 | 未测试 |
+| 2 | staging | 10.20.2.18 | ops | 2222 | 未测试 |
 
 你明确回复：
 
@@ -131,13 +129,21 @@ Agent 展示并编号列出 Java 服务/PID。你选择后，这个选择就是�
 
 > 选择 1。
 
-即使只有一个 JVM，也必须显示选项并等待选择。若容器重启、ID 或 PID/进程身份变化，当前任务停止并重新列出受影响阶段的选项。
+即使只有一个 JVM，也必须显示选项并等待选择。这个 PID 选择就是目标确认；无需再对同一组目标做第四次确认。若容器重启、ID 或 PID/进程身份变化，当前任务停止并重新列出受影响阶段的选项。
 
 ### 密码输入位置
 
-密码不要发在聊天里。服务器配置完成并选择服务器后，Agent 会给出 `! ssh beta true`。在 Claude Code 的本地终端执行时，OpenSSH 会显示密码提示；直接在该终端提示中输入即可，输入内容通常不会回显。认证成功后，脚本设置的短期 ControlMaster 连接可供 Agent 后续命令复用；10 分钟后自动过期，诊断结束时应关闭连接。若出现 `Permission denied`，不要反复尝试；先核对用户名、密码和服务器授权，避免账号锁定。
+密码不要发在聊天里。选择服务器后，如果 Agent 的 shell 没有 TTY，它会给出 `! ssh beta true`。在本机终端执行时，OpenSSH 会显示密码提示；直接在该提示中输入即可，输入内容通常不会回显。新建 alias 的脚本配置了短期 ControlMaster；已有 alias 需先通过 `ssh -G beta` 核实是否支持复用，否则由你在本地终端保持 master 连接。10 分钟后自动过期，诊断结束时应关闭连接。若出现 `Permission denied`，不要反复尝试；先核对用户名、密码和服务器授权，避免账号锁定。
 
 ## 5. 兼容性检查与诊断计划
+
+通过兼容性检查后，若本机没有 Arthas 缓存，准备脚本会自动从官方启动地址下载 4.3.5、核对 JAR manifest 版本并缓存：
+
+```bash
+scripts/prepare-arthas.sh
+```
+
+普通诊断时，`arthas-batch.sh` 在未指定 `--arthas-boot` 时会自动调用准备脚本。首次下载记录的 SHA-256 用于之后检查本地缓存是否变化，不是独立的发布者签名。
 
 Attach 前，Agent 应检查 Linux/架构、Java 版本和路径、JVM 用户、PID namespace、Attach 能力、容器资源限制，以及临时目录和报告输出能力。Attach 运行目录与报告文件目录要分开确认。
 

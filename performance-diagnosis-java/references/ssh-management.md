@@ -4,15 +4,9 @@
 
 ## 本地预检
 
-检查 `ssh` 是否可用、`~/.ssh` 是否存在、config/key 文件是否存在、agent 是否可用。Key 文件存在只说明文件存在，不说明免密可用。绝不读取私钥内容。
+检查 `ssh` 是否可用、`~/.ssh` 是否存在、config/key 文件是否存在、agent 是否可用。Key 文件存在只说明文件存在，不说明认证可用。绝不读取私钥内容。
 
-逐个探测 config alias 时使用非交互模式和短超时，例如：
-
-```bash
-ssh -o BatchMode=yes -o ConnectTimeout=5 beta 'printf SSH_OK'
-```
-
-BatchMode 成功表示当前密钥/agent 可用；失败也可能只是需要交互式密码，不能直接把该 alias 判为不可达。列表应标记为“需要交互认证或暂不可达”，由执行人选择后再连接。不要设置 `StrictHostKeyChecking=no`。未知 Host Key 必须交由执行人按其组织流程核实和接受。报告可展示 alias、解析出的 HostName/User/Port 和测试状态，但避免输出私钥路径之外的敏感连接细节。
+`scripts/list-ssh-servers.sh` 仅调用 `ssh -G` 解析本地有效配置，不尝试建立网络连接。因此它不判断主机是否可达，也不声称密钥登录成功。用户选择服务器后，才对该 alias 发起连接。不要设置 `StrictHostKeyChecking=no`。未知 Host Key 必须交由执行人按其组织流程核实和接受。列表可展示 alias、解析出的 HostName/User/Port，并标为“未测试”。
 
 ## 服务器选择与新增
 
@@ -22,7 +16,7 @@ BatchMode 成功表示当前密钥/agent 可用；失败也可能只是需要交
 performance-diagnosis-java/scripts/setup-ssh-server.sh --alias beta --host 10.20.1.15 --user deploy --port 22 --auth password
 ```
 
-脚本支持有 TTY 的本地交互模式，也支持上述非交互参数模式。缺少 TTY 且缺少必要参数时会输出用法并报错，不会静默退出。写入前会检查 alias 是否重复；成功后以原子替换方式保留原配置内容并追加新 Host 块，配置文件权限设为 `600`。旧版本遗留的 `config.performance-diagnosis.<alias>` 片段会保留，但不会阻止新 Host 写入。密码/keyboard-interactive 密码不经脚本输入、参数、日志或文件。如执行环境没有 TTY，用户在本地终端运行脚本给出的 `ssh <alias> true` 命令，并在 OpenSSH 密码提示中输入；不要发给 Agent。密码模式会配置 `ControlMaster auto` 和 10 分钟 `ControlPersist`，认证成功后后续 SSH 命令复用该连接；诊断结束后发送 `ssh -O exit <alias>` 关闭连接。key 模式支持 `--public-key ~/.ssh/id_ed25519.pub`；有 TTY 时也可以由本机调用 `ssh-keygen` 生成专用 key。私钥只保留在本机，脚本显示 `.pub` 公钥供执行人按组织流程安装，不自动上传。
+脚本支持有 TTY 的本地交互模式，也支持上述非交互参数模式。缺少 TTY 且缺少必要参数时会输出用法并报错，不会静默退出。写入前会检查 alias 是否重复及前置 `Host *`，成功后以原子替换方式保留原配置内容并追加新 Host 块，配置文件权限设为 `600`；写入后用 `ssh -G` 核实 HostName/User/Port 的有效值。旧版本遗留的 `config.performance-diagnosis.<alias>` 片段会保留，但不会阻止新 Host 写入。密码/keyboard-interactive 密码不经脚本输入、参数、日志或文件。如 Agent shell 没有 TTY，用户在本地终端运行 `ssh <alias> true` 并在 OpenSSH 密码提示中输入；不要发给 Agent。密码模式新建 alias 会配置 `ControlMaster auto` 和 10 分钟 `ControlPersist`，认证成功后后续 SSH 命令可复用该连接；结束后执行 `ssh -O exit <alias>`。已有 alias 不会被自动改写，必须用 `ssh -G <alias>` 确认 ControlMaster/ControlPath；若未配置，须由用户在本地终端保持 SSH master 连接或按组织流程调整配置。key 模式支持 `--public-key ~/.ssh/id_ed25519.pub`；有 TTY 时也可以由本机调用 `ssh-keygen` 生成专用 key。私钥只保留在本机，脚本显示 `.pub` 公钥供执行人按组织流程安装，不自动上传。
 
 向导不捕获或保存密码，不关闭 Host Key 校验，不覆盖已有 alias/密钥/配置片段。交互密码仅由 OpenSSH 客户端直接接收。向导不执行远端 `authorized_keys` 修改。
 

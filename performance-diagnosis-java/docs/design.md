@@ -1,5 +1,7 @@
 # Java Docker 线上性能自主诊断 Skill 详细设计方案
 
+> **状态：历史原始设计，不作为当前实现的验收基线。** 当前产品行为以 [`../SKILL.md`](../SKILL.md) 和 references 下的执行规范为准。本文保留最初设想以供追溯；与主流程冲突的部分尚未全部重写。
+
 **项目名称：** Production Performance Diagnosis  
 **项目类型：** AI Agent Skill  
 **核心诊断工具：** Alibaba Arthas  

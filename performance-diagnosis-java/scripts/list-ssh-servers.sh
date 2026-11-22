@@ -36,10 +36,6 @@ printf '%s\n' "$aliases" | while IFS= read -r alias; do
     $1 == "port" { port=$2 }
     END { printf "%s\t%s\t%s", host, user, port }
   ')
-  if ssh -F "$config" -o BatchMode=yes -o ConnectTimeout=5 "$alias" true >/dev/null 2>&1; then
-    status=passwordless-connectable
-  else
-    status=interactive-auth-required-or-unavailable
-  fi
+  status=not-tested
   printf '%s\t%s\t%s\t%s\t%s\n' "$alias" "$details" "$status"
 done

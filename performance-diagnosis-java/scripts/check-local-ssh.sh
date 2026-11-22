@@ -26,4 +26,4 @@ for key in id_ed25519.pub id_rsa.pub; do
     printf 'Public key file: present (%s)\n' "$ssh_dir/$key"
   fi
 done
-printf '%s\n' 'Key presence does not establish passwordless connectivity; test a selected alias with BatchMode.'
+printf '%s\n' 'Key presence does not establish connectivity; server listing is local-only, and connection is tested only after selection.'

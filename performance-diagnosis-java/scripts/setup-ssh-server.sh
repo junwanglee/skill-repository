@@ -102,6 +102,9 @@ fi
 if [ -e "$config" ] && [ ! -f "$config" ]; then
   fail "SSH config is not a regular file: $config"
 fi
+if [ -f "$config" ] && awk 'tolower($1)=="host" { for(i=2;i<=NF;i++) if($i=="*") found=1 } END { exit(found?0:1) }' "$config"; then
+  fail "A Host * block already exists in $config. Add the new Host block before it, then verify with: ssh -G $alias"
+fi
 umask 077
 entry_tmp=$(mktemp "$ssh_dir/ssh-host-entry.XXXXXX")
 {
@@ -130,6 +133,14 @@ mv "$config_tmp" "$config"
 trap - EXIT
 rm -f "$entry_tmp"
 printf 'Added Host %s to %s. Existing entries were preserved.\n' "$alias" "$config"
+effective=$(ssh -G -F "$config" "$alias" 2>/dev/null || true)
+if [ -z "$effective" ] || ! printf '%s\n' "$effective" | awk -v host="$hostname" -v user="$username" -v port="$port" '
+  $1=="hostname" && $2==host {h=1}
+  $1=="user" && $2==user {u=1}
+  $1=="port" && $2==port {p=1}
+  END {exit(h && u && p ? 0 : 1)}'; then
+  fail "The effective SSH settings differ from the requested Host entry. Review 'ssh -G $alias' and fix $config before connecting."
+fi
 if [ "$auth_mode" = password ]; then
   printf 'Password is never read by this script. In a local terminal, SSH can prompt for it with:\n  ssh %s true\n' "$alias"
   if [ "$interactive" -eq 1 ]; then

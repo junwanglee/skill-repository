@@ -5,6 +5,7 @@
 ## 检查项
 
 - Linux OS、CPU 架构、Java 版本和目标 JVM 实际 Java 路径。
+- Java 8 下所选 Arthas 启动方式所需的 JDK Attach 组件；若 `as.sh`/启动环境依赖 `tools.jar`，检查文件存在、可读且与目标 JDK 路径匹配。纯 JRE 缺少该组件时不得等到 Attach 阶段才发现；先尝试使用目标 JDK 自带的 Java/Attach 工具，不能满足则标记不兼容或未判定并停止。
 - 容器内 PID 与宿主机 PID namespace 的对应关系；进程是否仍是已确认目标。
 - JVM UID/GID 与诊断进程 UID/GID 是否一致，Attach 文件/信号是否可访问。
 - JVM Attach 相关文件、动态 Attach 设置、容器安全策略及 `/proc` 可见性。
