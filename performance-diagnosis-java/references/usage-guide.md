@@ -35,7 +35,22 @@ scripts/list-ssh-servers.sh
 
 如果尚未配置服务器，Agent 提供两种方式，最终都会把配置记录到本机 `~/.ssh/config`：
 
-**方式 A：逐项问答。** Agent 逐个询问 alias、主机/IP、用户名、端口（默认 22）和认证方式；信息收齐后调用脚本。用户不必自己拼命令。
+**方式 A：逐项问答。** Agent 每轮只问一个字段，收到回答后再问下一个，不一次要求你填整张表：
+
+```text
+Agent：服务器别名叫什么？
+你：beta
+Agent：服务器 IP 或域名是什么？
+你：172.26.159.208
+Agent：SSH 用户名是什么？
+你：lijunwang
+Agent：SSH 端口使用默认 22 吗？
+你：是
+Agent：使用密码登录还是 SSH key？密码只在本机终端输入。
+你：密码
+```
+
+随后 Agent 调用脚本并把 Host 块记录到本机 SSH 配置。
 
 **方式 B：一条命令。** Agent 把需要的值填入命令，让执行人复制运行：
 
@@ -43,7 +58,7 @@ scripts/list-ssh-servers.sh
 !bash ~/.claude/skills/performance-diagnosis-java/scripts/setup-ssh-server.sh --alias beta --host 10.20.1.15 --user deploy --port 22 --auth password
 ```
 
-脚本检查 alias 未重复后，将新 Host 块追加到本机 `~/.ssh/config`，保留既有配置并设置文件权限为 `600`，同时保存一份独立片段供查看。完成后 alias 会被服务器列表脚本发现。密码只输入 OpenSSH 本地提示符，不提供给 Agent；若 Agent shell 没有 TTY，在你自己的终端运行脚本输出的 `ssh beta true`。密钥模式可用 `--auth key --public-key ~/.ssh/id_ed25519.pub`；脚本只展示公钥，不上传，也不读取私钥内容。
+脚本检查 alias 未重复后，将新 Host 块追加到本机 `~/.ssh/config`，保留既有配置并设置文件权限为 `600`。旧版本留下的同名片段会保留，但不会阻止写入。完成后 alias 会被服务器列表脚本发现。密码只输入 OpenSSH 本地提示符，不提供给 Agent；若 Agent shell 没有 TTY，在你自己的终端运行脚本输出的 `ssh beta true`。密码模式自动配置短期 SSH 连接复用，后续诊断命令不必重复输入密码；结束后关闭本次连接。密钥模式可用 `--auth key --public-key ~/.ssh/id_ed25519.pub`；脚本只展示公钥，不上传，也不读取私钥内容。
 
 如果直接在本地终端运行（有 TTY），也可不传参数启动向导：
 
@@ -112,13 +127,15 @@ Agent 必须等你选择后才查看该容器的进程。一次只诊断一个�
 2. metrics-agent — PID 32 — Java 1.8.0_402 — UID:GID 10001:10001
 ```
 
-你选择后，Agent 单独复述服务器、容器 ID、服务和 PID，再请求最终确认。只有收到确认才进行兼容性检查：
+Agent 展示并编号列出 Java 服务/PID。你选择后，这个选择就是目标确认；Agent 简要复述已选目标后直接做兼容性检查，不再重复询问同一组信息：
 
 > 选择 1。
->
-> 请确认目标：beta / order-service (`a1b2c3d4e5f6`) / `order-service.jar` / PID 1。
 
-再回复“确认”后才继续。即使只有一个 JVM，也必须显示选项并等待选择，再展示最终目标等待确认。若容器重启、ID 或 PID/进程身份变化，当前任务停止并重新确认。
+即使只有一个 JVM，也必须显示选项并等待选择。若容器重启、ID 或 PID/进程身份变化，当前任务停止并重新列出受影响阶段的选项。
+
+### 密码输入位置
+
+密码不要发在聊天里。服务器配置完成并选择服务器后，Agent 会给出 `! ssh beta true`。在 Claude Code 的本地终端执行时，OpenSSH 会显示密码提示；直接在该终端提示中输入即可，输入内容通常不会回显。认证成功后，脚本设置的短期 ControlMaster 连接可供 Agent 后续命令复用；10 分钟后自动过期，诊断结束时应关闭连接。若出现 `Permission denied`，不要反复尝试；先核对用户名、密码和服务器授权，避免账号锁定。
 
 ## 5. 兼容性检查与诊断计划
 

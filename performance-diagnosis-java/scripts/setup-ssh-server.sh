@@ -96,8 +96,6 @@ if [ "$auth_mode" = key ]; then
   [ -f "$public_key_path" ] && [ -f "$identity_file" ] || fail 'Matching public and private key files are required.'
 fi
 
-snippet="$ssh_dir/config.performance-diagnosis.$alias"
-[ ! -e "$snippet" ] || fail "Refusing to overwrite existing file: $snippet"
 if [ -L "$config" ]; then
   fail "Refusing to replace symlinked SSH config: $config"
 fi
@@ -105,26 +103,32 @@ if [ -e "$config" ] && [ ! -f "$config" ]; then
   fail "SSH config is not a regular file: $config"
 fi
 umask 077
+entry_tmp=$(mktemp "$ssh_dir/ssh-host-entry.XXXXXX")
 {
   printf 'Host %s\n    HostName %s\n    User %s\n    Port %s\n' "$alias" "$hostname" "$username" "$port"
   if [ "$auth_mode" = password ]; then
     printf '    PreferredAuthentications keyboard-interactive,password,publickey\n'
+    printf '    ControlMaster auto\n    ControlPath ~/.ssh/cm-%%C\n    ControlPersist 10m\n'
   else
     printf '    IdentityFile %s\n    IdentitiesOnly yes\n' "$identity_file"
   fi
-} > "$snippet"
-chmod 600 "$snippet"
-
-printf 'Created reviewable SSH config snippet: %s\n' "$snippet"
-cat "$snippet"
+} > "$entry_tmp"
+chmod 600 "$entry_tmp"
+printf 'SSH Host entry to be added:\n'
+cat "$entry_tmp"
+legacy_snippet="$ssh_dir/config.performance-diagnosis.$alias"
+if [ -e "$legacy_snippet" ]; then
+  printf 'Leaving legacy snippet untouched: %s\n' "$legacy_snippet"
+fi
 config_tmp=$(mktemp "$ssh_dir/config.tmp.XXXXXX")
-trap 'rm -f "$config_tmp"' EXIT
+trap 'rm -f "$config_tmp" "$entry_tmp"' EXIT
 if [ -f "$config" ]; then cat "$config" > "$config_tmp"; fi
 if [ -s "$config_tmp" ]; then printf '\n' >> "$config_tmp"; fi
-cat "$snippet" >> "$config_tmp"
+cat "$entry_tmp" >> "$config_tmp"
 chmod 600 "$config_tmp"
 mv "$config_tmp" "$config"
 trap - EXIT
+rm -f "$entry_tmp"
 printf 'Added Host %s to %s. Existing entries were preserved.\n' "$alias" "$config"
 if [ "$auth_mode" = password ]; then
   printf 'Password is never read by this script. In a local terminal, SSH can prompt for it with:\n  ssh %s true\n' "$alias"

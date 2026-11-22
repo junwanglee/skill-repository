@@ -22,7 +22,7 @@ BatchMode 成功表示当前密钥/agent 可用；失败也可能只是需要交
 performance-diagnosis-java/scripts/setup-ssh-server.sh --alias beta --host 10.20.1.15 --user deploy --port 22 --auth password
 ```
 
-脚本支持有 TTY 的本地交互模式，也支持上述非交互参数模式。缺少 TTY 且缺少必要参数时会输出用法并报错，不会静默退出。写入前会检查 alias 是否重复；成功后以原子替换方式保留原配置内容并追加新 Host 块，配置文件权限设为 `600`，同时保留一份独立配置片段供查看。密码/keyboard-interactive 密码不经脚本输入、参数、日志或文件；如执行环境没有 TTY，用户需在自己的终端运行脚本给出的 `ssh <alias> true` 命令并在 OpenSSH 提示符输入密码。key 模式支持 `--public-key ~/.ssh/id_ed25519.pub`；有 TTY 时也可以由本机调用 `ssh-keygen` 生成专用 key。私钥只保留在本机，脚本显示 `.pub` 公钥供执行人按组织流程安装，不自动上传。
+脚本支持有 TTY 的本地交互模式，也支持上述非交互参数模式。缺少 TTY 且缺少必要参数时会输出用法并报错，不会静默退出。写入前会检查 alias 是否重复；成功后以原子替换方式保留原配置内容并追加新 Host 块，配置文件权限设为 `600`。旧版本遗留的 `config.performance-diagnosis.<alias>` 片段会保留，但不会阻止新 Host 写入。密码/keyboard-interactive 密码不经脚本输入、参数、日志或文件。如执行环境没有 TTY，用户在本地终端运行脚本给出的 `ssh <alias> true` 命令，并在 OpenSSH 密码提示中输入；不要发给 Agent。密码模式会配置 `ControlMaster auto` 和 10 分钟 `ControlPersist`，认证成功后后续 SSH 命令复用该连接；诊断结束后发送 `ssh -O exit <alias>` 关闭连接。key 模式支持 `--public-key ~/.ssh/id_ed25519.pub`；有 TTY 时也可以由本机调用 `ssh-keygen` 生成专用 key。私钥只保留在本机，脚本显示 `.pub` 公钥供执行人按组织流程安装，不自动上传。
 
 向导不捕获或保存密码，不关闭 Host Key 校验，不覆盖已有 alias/密钥/配置片段。交互密码仅由 OpenSSH 客户端直接接收。向导不执行远端 `authorized_keys` 修改。
 
