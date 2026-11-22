@@ -24,7 +24,7 @@
 
 生产默认只读。L1 为低开销只读采集；L2 instrumentation 需限定范围并默认不超过 30 秒；L3 高风险操作在 v1 禁止。只使用容器已有可写临时目录，Attach 临时目录与报告目录分别检查。SSH 密码由本地 OpenSSH 提示符接收，不进入 Skill；SSH 私钥不会被读取或复制。
 
-V1 固定 Arthas 4.3.5，首次使用时由 `scripts/prepare-arthas.sh` 从官方启动包地址下载到本地版本缓存，检查 JAR 内版本并记录 SHA-256；后续使用缓存副本并校验其未变化。该摘要记录首次 HTTPS 下载的文件，不是独立发布者签名。Arthas 批处理使用 `as.sh -f <script> <pid>` 等价方式，L1 外层超时最多 30 秒，批处理命令必须明确次数上限。Arthas 会话和 profiler 在清理时分别停止并验证。
+V1 固定 Arthas 4.3.5，首次使用时由 `scripts/prepare-arthas.sh` 从官方启动包地址下载到本地版本缓存，检查 JAR 内版本并记录 SHA-256；后续使用缓存副本并校验其未变化。该摘要记录首次 HTTPS 下载的文件，不是独立发布者签名。CPU profiler 默认采样间隔 10 ms，可选择 20/50 ms；总时长默认 20 秒、最多 30 秒。容器内存使用达到 limit 的 80% 或近期发生 OOM 时不执行 profiler。L1 外层超时最多 30 秒，批处理命令必须明确次数上限。Arthas 会话和 profiler 在清理时分别停止并验证。
 
 ## 本地检查脚本
 
@@ -43,7 +43,7 @@ scripts/setup-ssh-server.sh
 
 向导默认支持首次交互式密码登录（密码由本地 OpenSSH 提示，不会被脚本捕获），也可选择密钥登录。脚本会把新 Host 块追加到本机 `~/.ssh/config` 并保留原有内容；存在 `Host *` 时会拒绝写入，且不会覆盖重名 alias 或自动向远端安装公钥。详见 [`references/ssh-management.md`](references/ssh-management.md)。
 
-`list-ssh-servers.sh` 只解析本机配置，从不探测网络。只有服务器选择后才连接；密码只输入本地 OpenSSH 提示符。新建 alias 会配置短期 ControlMaster；已有 alias 需检查有效配置是否支持连接复用。远程诊断须遵循 Skill 的逐项确认流程。
+`list-ssh-servers.sh` 只解析本机配置，从不探测网络。只有服务器选择后才连接；若 ControlMaster 已存在就直接复用，只在不存在或过期时需要本地 OpenSSH 密码登录。新建 alias 的连接空闲 1 小时后过期；已有 alias 以 `ssh -G <alias>` 显示的 `ControlPersist` 为准。远程诊断须遵循 Skill 的逐项确认流程，所有面向执行者的交互使用中文。
 
 Arthas 准备脚本会在本地缓存缺失时自动下载，单独准备可运行：
 

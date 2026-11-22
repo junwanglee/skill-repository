@@ -4,7 +4,7 @@ set -eu
 command -v ssh >/dev/null 2>&1 || { printf '%s\n' 'ssh client: missing' >&2; exit 1; }
 config=${HOME:?HOME is not set}/.ssh/config
 if [ ! -r "$config" ]; then
-  printf 'SSH config is missing or unreadable: %s\n' "$config"
+  printf 'SSH 配置不存在或不可读：%s\n' "$config"
   exit 0
 fi
 
@@ -18,16 +18,16 @@ aliases=$(awk '
 ' "$config")
 
 if [ -z "$aliases" ]; then
-  printf 'No literal SSH Host aliases found in %s. Wildcard-only Host blocks are not selectable targets.\n' "$config"
+  printf '在 %s 中没有找到可选择的 SSH Host 别名。仅包含通配符的 Host 块不是目标。\n' "$config"
   exit 0
 fi
 
-printf 'ALIAS\tHOST\tUSER\tPORT\tSTATUS\n'
+printf '别名\t主机\t用户\t端口\t状态\n'
 printf '%s\n' "$aliases" | while IFS= read -r alias; do
   case "$alias" in ''|*[!a-zA-Z0-9_.-]*) continue ;; esac
   resolved=$(ssh -G -F "$config" "$alias" 2>/dev/null || true)
   [ -n "$resolved" ] || {
-    printf '%s\t?\t?\t?\tconfig-error\n' "$alias"
+    printf '%s\t?\t?\t?\t配置错误\n' "$alias"
     continue
   }
   details=$(printf '%s\n' "$resolved" | awk '
@@ -36,6 +36,6 @@ printf '%s\n' "$aliases" | while IFS= read -r alias; do
     $1 == "port" { port=$2 }
     END { printf "%s\t%s\t%s", host, user, port }
   ')
-  status=not-tested
+  status=未测试
   printf '%s\t%s\t%s\t%s\t%s\n' "$alias" "$details" "$status"
 done

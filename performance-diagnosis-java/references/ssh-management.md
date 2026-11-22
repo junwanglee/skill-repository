@@ -16,7 +16,7 @@
 performance-diagnosis-java/scripts/setup-ssh-server.sh --alias beta --host 10.20.1.15 --user deploy --port 22 --auth password
 ```
 
-脚本支持有 TTY 的本地交互模式，也支持上述非交互参数模式。缺少 TTY 且缺少必要参数时会输出用法并报错，不会静默退出。写入前会检查 alias 是否重复及前置 `Host *`，成功后以原子替换方式保留原配置内容并追加新 Host 块，配置文件权限设为 `600`；写入后用 `ssh -G` 核实 HostName/User/Port 的有效值。旧版本遗留的 `config.performance-diagnosis.<alias>` 片段会保留，但不会阻止新 Host 写入。密码/keyboard-interactive 密码不经脚本输入、参数、日志或文件。如 Agent shell 没有 TTY，用户在本地终端运行 `ssh <alias> true` 并在 OpenSSH 密码提示中输入；不要发给 Agent。密码模式新建 alias 会配置 `ControlMaster auto` 和 10 分钟 `ControlPersist`，认证成功后后续 SSH 命令可复用该连接；结束后执行 `ssh -O exit <alias>`。已有 alias 不会被自动改写，必须用 `ssh -G <alias>` 确认 ControlMaster/ControlPath；若未配置，须由用户在本地终端保持 SSH master 连接或按组织流程调整配置。key 模式支持 `--public-key ~/.ssh/id_ed25519.pub`；有 TTY 时也可以由本机调用 `ssh-keygen` 生成专用 key。私钥只保留在本机，脚本显示 `.pub` 公钥供执行人按组织流程安装，不自动上传。
+脚本支持有 TTY 的本地交互模式，也支持上述非交互参数模式。缺少 TTY 且缺少必要参数时会输出用法并报错，不会静默退出。写入前会检查 alias 是否重复及前置 `Host *`，成功后以原子替换方式保留原配置内容并追加新 Host 块，配置文件权限设为 `600`；写入后用 `ssh -G` 核实 HostName/User/Port 的有效值。旧版本遗留的 `config.performance-diagnosis.<alias>` 片段会保留，但不会阻止新 Host 写入。密码/keyboard-interactive 密码不经脚本输入、参数、日志或文件。如 Agent shell 没有 TTY，用户只在没有可复用 ControlMaster 时才需在本地终端运行 `ssh <alias> true` 并在 OpenSSH 密码提示中输入；不要发给 Agent。新建密码 alias 配置 `ControlMaster auto`、`ControlPath ~/.ssh/cm-%C` 和 1 小时 `ControlPersist`。认证成功后，同一 SSH 配置下的后续命令应复用连接；诊断结束时默认让连接自行过期，执行人可随时运行 `ssh -O exit <alias>` 主动关闭。对于已有 alias，不自动改写配置；检查 `ssh -G <alias>` 和 `ssh -O check <alias>`。若 master 不存在或已过期，再提示执行人登录一次。key 模式支持 `--public-key ~/.ssh/id_ed25519.pub`；有 TTY 时也可以由本机调用 `ssh-keygen` 生成专用 key。私钥只保留在本机，脚本显示 `.pub` 公钥供执行人按组织流程安装，不自动上传。
 
 向导不捕获或保存密码，不关闭 Host Key 校验，不覆盖已有 alias/密钥/配置片段。交互密码仅由 OpenSSH 客户端直接接收。向导不执行远端 `authorized_keys` 修改。
 

@@ -58,7 +58,7 @@ Agent：使用密码登录还是 SSH key？密码只在本机终端输入。
 !bash ~/.claude/skills/performance-diagnosis-java/scripts/setup-ssh-server.sh --alias beta --host 10.20.1.15 --user deploy --port 22 --auth password
 ```
 
-脚本检查 alias 未重复及 `Host *` 冲突后，将新 Host 块追加到本机 `~/.ssh/config`，保留既有配置并设置文件权限为 `600`，随后用 `ssh -G` 校验有效值。旧版本留下的同名片段会保留，但不会阻止写入。完成后 alias 会被服务器列表脚本发现。密码只输入 OpenSSH 本地提示符，不提供给 Agent；若 Agent shell 没有 TTY，在你自己的终端运行脚本输出的 `ssh beta true`。新建密码 alias 会配置短期 SSH 连接复用；结束后关闭本次连接。密钥模式可用 `--auth key --public-key ~/.ssh/id_ed25519.pub`；脚本只展示公钥，不上传，也不读取私钥内容。
+脚本检查 alias 未重复及 `Host *` 冲突后，将新 Host 块追加到本机 `~/.ssh/config`，保留既有配置并设置文件权限为 `600`，随后用 `ssh -G` 校验有效值。旧版本留下的同名片段会保留，但不会阻止写入。完成后 alias 会被服务器列表脚本发现。密码只输入本地 OpenSSH 提示符，不提供给 Agent。新建密码 alias 会配置 1 小时连接复用；只在连接复用不存在或已过期时，Agent 才请你在本地终端运行 `ssh beta true` 输入一次密码。诊断结束后连接保持到 1 小时空闲期满；如需立即关闭，可运行 `ssh -O exit beta`。已有 alias 的有效时长以 `ssh -G beta` 为准。密钥模式可用 `--auth key --public-key ~/.ssh/id_ed25519.pub`；脚本只展示公钥，不上传，也不读取私钥内容。
 
 如果直接在本地终端运行（有 TTY），也可不传参数启动向导：
 
@@ -144,7 +144,7 @@ Agent 展示 Java 服务/PID 候选。使用原生选项控件点选服务；纯
 
 ### 密码输入位置
 
-密码不要发在聊天里。选择服务器后，如果 Agent 的 shell 没有 TTY，它会给出 `! ssh beta true`。在本机终端执行时，OpenSSH 会显示密码提示；直接在该提示中输入即可，输入内容通常不会回显。新建 alias 的脚本配置了短期 ControlMaster；已有 alias 需先通过 `ssh -G beta` 核实是否支持复用，否则由你在本地终端保持 master 连接。10 分钟后自动过期，诊断结束时应关闭连接。若出现 `Permission denied`，不要反复尝试；先核对用户名、密码和服务器授权，避免账号锁定。
+密码不要发在聊天里。选择服务器后，Agent 先检查 `ssh -O check beta`。如果已有 ControlMaster，就直接复用，不再让你运行登录命令；只有 master 不存在/过期时，才给出 `! ssh beta true`。在本机终端执行后，OpenSSH 会显示密码提示；直接在该提示中输入即可，内容通常不会回显。同一 master 默认保持至配置的空闲期结束。新建 alias 为 1 小时；你当前的 beta 配置若 `ssh -G beta` 显示 `controlpersist 600`，则仍是 10 分钟。可在本机 `~/.ssh/config` 的 beta 主机块中将 `ControlPersist 600` 改为 `ControlPersist 1h`。若出现 `Permission denied`，不要反复尝试；先核对用户名、密码和服务器授权，避免账号锁定。
 
 ## 5. 选择诊断方法、采样时长和输出位置
 
@@ -172,7 +172,9 @@ Agent 应按症状删去不适用项或替换为对应方法（例如 GC、内�
 - 时长：1 分钟（推荐）、3 分钟、5 分钟、10 分钟，或在上限内自定义。
 - 间隔：5 秒、10 秒（推荐）、30 秒。
 
-L2 profiler/trace/monitor 另有单独时长选择：10 秒、20 秒（推荐）、30 秒，或自定义不超过 30 秒。时长选择后暂停；接着展示目标、方法、时长、输出路径和停止方案，再单独请求明确批准。不能把“选择某个方法”当成启动 L2 的批准。
+CPU profiler 的默认采样间隔是 10 ms（每秒约 100 次采样），与总采样时长不是一回事。你可以选择 10 ms（常规细节）、20 ms 或 50 ms；间隔越长，采样次数和开销越低，但细节会减少。Arthas 以纳秒参数传递该间隔，例如 20 ms 为 `-i 20000000`。总采样时长仍单独选择 10 秒、20 秒（推荐）或 30 秒，不能超过 30 秒。时长选择后暂停；接着展示目标、方法、间隔、时长、输出路径和停止方案，再单独请求明确批准。不能把“选择某个方法”当成启动 L2 的批准。
+
+若容器内存已用达到限制的 80%，或近期发生 OOM，Agent 不提供 L2 profiler 选项，改为 L1 或建议等资源回落后再采。Profiler 不与重复 dashboard 采集并行运行。
 
 执行前，Agent 要明确展示保存位置：
 
@@ -203,16 +205,16 @@ L2 profiler/trace/monitor 另有单独时长选择：10 秒、20 秒（推荐）
 1. 采集 `uptime`、`free -m`、`docker stats --no-stream`，判断宿主机和容器资源状态。
 2. 采集 Arthas `dashboard`，记录 JVM 线程、内存、GC 等基线。
 3. 使用 `thread -n 10` 找出 CPU 较高线程，结合线程栈和短间隔重复观察确认现象。
-4. 如果证据指向 JVM 热点，且输出位置可用，说明范围后启动一次最多 30 秒的 profiler 采样。
+4. 只有证据指向 JVM 热点、容器内存余量安全且输出位置可用，才提供 profiler 方案；建议 20 秒、采样间隔 10 ms。执行者可将采样间隔调到 20 或 50 ms 以降低开销，但会减少细节。单次总时长不超过 30 秒，并需单独批准。
 5. 到时停止同一 profiler 任务，确认已停止，再分析热点方法/调用树。
 6. 保存原始输出和时间线，回传文件并校验 SHA-256。
 7. 只清理本次任务创建的远程临时文件，生成报告。
 
 诊断过程中的示例沟通：
 
-> Agent：L1 显示容器 CPU 配额为 2 核，CPU 使用接近配额。`thread -n 10` 连续两次发现同一业务线程栈集中在 `PriceCalculator.rebuildIndex`。Profiler 需要使用已有 `/tmp` 输出目录，计划采样 20 秒，是否继续？
+> Agent：L1 显示容器 CPU 配额为 2 核，CPU 使用接近配额。`thread -n 10` 连续两次发现同一业务线程栈集中在 `PriceCalculator.rebuildIndex`。容器内存余量为 35%，未发现近期 OOM。建议 CPU profiler 采样 20 秒，采样间隔 10 ms，输出到容器已有的 `/tmp/pd-<task-id>/cpu.html`。是否批准？
 >
-> 执行人：确认，限定 `PriceCalculator.rebuildIndex` 相关热点，20 秒后停止。
+> 执行人：批准 CPU profiler 20 秒。
 
 L2 操作应有明确目标、上限和可靠停止方式；同一 JVM 同时最多一个主动采样任务。无法限制或停止时，不执行该操作。
 
