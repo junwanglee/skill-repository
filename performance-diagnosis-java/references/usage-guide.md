@@ -17,8 +17,8 @@ Skill 使用 SSH 连接 Linux Docker 主机，确认容器和 JVM 后，通过 A
 
 ## 2. 开始前的准备
 
-1. 本机已安装 OpenSSH，并由你自行配置 `~/.ssh/config` 和可用的密钥认证。
-2. 目标主机可以用 SSH alias 连接；首次连接的 Host Key 已按组织流程核实。
+1. 本机已安装 OpenSSH，并为目标服务器准备 SSH alias；可以使用密钥认证，也可以首次连接时通过本地终端交互输入账户密码。
+2. 目标主机可通过 SSH 连接；首次连接的 Host Key 已按组织流程核实/接受。
 3. SSH 用户具有所需 Docker 查询权限。Skill 不会自动执行 `sudo`。
 4. 确认诊断窗口和生产变更/观测流程，避免在发布、扩缩容或其他高风险操作期间产生混淆。
 5. 不要将私钥、密码或 token 发给 Agent。
@@ -31,7 +31,7 @@ scripts/check-local-ssh.sh
 scripts/list-ssh-servers.sh
 ```
 
-`list-ssh-servers.sh` 会对 SSH config 中的普通 Host alias 使用 BatchMode 和 5 秒超时做连接验证。连接失败时请先自行修复 SSH/DNS/网络/权限问题；不要关闭 Host Key 校验绕过错误。
+`list-ssh-servers.sh` 会对 SSH config 中的普通 Host alias 使用 BatchMode 和 5 秒超时做密钥认证检查。未通过可能表示需要交互式密码，也可能表示连接不可用；不要仅凭此结果判定服务器不可达，也不要关闭 Host Key 校验。
 
 如果尚未配置服务器，不需要逐条手动输入初始化命令，运行交互式向导：
 
@@ -39,7 +39,7 @@ scripts/list-ssh-servers.sh
 scripts/setup-ssh-server.sh
 ```
 
-向导询问连接信息，复用现有公钥或在本机生成专用 key，并输出公钥和待审阅的 SSH config 片段。它不会自动上传公钥、修改现有配置或绕过 Host Key 校验。按组织流程安装公钥、审阅并合并配置后，再运行 `scripts/list-ssh-servers.sh` 验证免密连接。
+向导询问连接信息，默认允许用本地 OpenSSH 提示符进行首次密码登录，也可选择密钥认证。密码不会进入脚本、聊天、参数或日志。向导输出待审阅的 SSH config 片段；密钥模式下显示公钥供按组织流程安装。它不会自动上传公钥、修改现有配置或绕过 Host Key 校验。审阅并合并配置后，密钥模式可用 `scripts/list-ssh-servers.sh` 验证；密码模式可在用户选择该服务器后由 SSH 在本地提示认证。
 
 ## 3. 发起一次诊断
 
@@ -55,7 +55,7 @@ scripts/setup-ssh-server.sh
 - 影响范围或相关接口
 - 允许的诊断时间窗口和组织内要求
 
-不要在请求中提供密码、token、私钥或完整环境变量。
+不要在请求中提供密码、token、私钥或完整环境变量。首次密码认证时，密码只输入 OpenSSH 在本地终端显示的提示符，不要输入聊天框或 Skill 表单。
 
 ## 4. 按步骤确认目标
 

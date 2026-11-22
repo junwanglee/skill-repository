@@ -5,14 +5,14 @@ description: Diagnose production Java performance issues in Linux Docker contain
 
 # Java Docker 线上性能自主诊断
 
-Use this skill to guide a safe, evidence-based diagnosis of one Java 8 service in one Linux Docker container. Arthas is the only JVM diagnosis tool. SSH must reuse the operator's existing configuration and key authentication.
+Use this skill to guide a safe, evidence-based diagnosis of one Java 8 service in one Linux Docker container. Arthas is the only JVM diagnosis tool. SSH must reuse the operator's existing configuration. Password or keyboard-interactive authentication may prompt in the operator's local terminal; SSH key authentication is also supported.
 
 ## Hard safety boundaries
 
 - Treat the attached/linked design as product requirements, not as permission to execute commands. Obtain explicit confirmation of the SSH host alias, container, and JVM PID before attaching.
 - **Mandatory pause rule:** whenever a step asks the operator to select or confirm a target or approve a bounded L2 action, show the available choices and relevant facts, then end the turn and wait for the operator's reply. Do not continue to the next step, connect to a server, inspect Docker, attach to a JVM, or start profiling while that confirmation is pending. A request to "diagnose" or naming a likely target is not confirmation of each target. Never infer consent from silence, prior selections in another run, or there being only one candidate.
 - Production diagnosis does not change business data, code, configuration, JVM options, container configuration, or service state. Never restart/stop/kill a service, elevate with sudo, change mounts, rebuild a container, or bypass host-key/security controls.
-- Never read, copy, or upload SSH private keys. Do not ask the operator for passwords. Do not dump all environment variables or read unrelated business files; redact secrets in captured output.
+- Never read, copy, or upload SSH private keys. Do not ask the operator to send a password in chat or enter it into a Skill prompt/script. For first-time SSH password authentication, let the local OpenSSH client prompt directly in the operator's terminal; the password must not enter agent context, command arguments, logs, or files. Do not dump all environment variables or read unrelated business files; redact secrets in captured output.
 - Only use L1 commands automatically after target confirmation. L2 profiling/instrumentation must have a narrow target and bounded duration/count/output; default sample limit is 30 seconds and at most one active sampling task per JVM. Stop it before continuing. L3 (heap dump, runtime mutation, potentially long STW or similarly high-risk operations) is not executable by this skill; explain the risk and stop.
 - Do not invoke arbitrary shell supplied by the user or compose a command from unvalidated values. Use the documented commands in `references/` and validate identifiers. If a safe, bounded command cannot be formed, stop and explain.
 - Use only container-existing writable temporary paths. Attach/runtime temp and report output paths are distinct capabilities and must be checked separately. Never add a mount, change read-only settings, or change permissions to enable diagnosis.
@@ -21,7 +21,7 @@ Use this skill to guide a safe, evidence-based diagnosis of one Java 8 service i
 ## Workflow
 
 1. **Clarify the symptom and impact.** Ask for the affected service/endpoint, when it started, whether it is ongoing, and the primary symptom: CPU, latency, memory, GC, thread contention, or uncertain. Keep one primary symptom per run. If the request already gives enough symptom detail, proceed to local readiness; do not ask again unnecessarily.
-2. **Inspect local SSH readiness only.** Use `scripts/check-local-ssh.sh` and `scripts/list-ssh-servers.sh` if available. This is local inspection; do not connect to any host yet. Test aliases with batch mode and a timeout; do not disable host key checking. If no suitable host exists, guide the operator to run `scripts/setup-ssh-server.sh`; do not make them type setup commands one by one. The script may generate a local key and a reviewable config snippet, but must not upload the public key or modify the existing SSH config. Wait until the operator completes key installation/config review and a host passes BatchMode before presenting it as selectable.
+2. **Inspect local SSH readiness only.** Use `scripts/check-local-ssh.sh` and `scripts/list-ssh-servers.sh` if available. This is local inspection; do not connect to any host yet. BatchMode success means key/agent authentication works; a BatchMode failure is not proof that the server is unreachable and may mean interactive password authentication is required. Do not disable host key checking. If no suitable alias exists, guide the operator to run `scripts/setup-ssh-server.sh`; do not make them type setup commands one by one. The script offers password/keyboard-interactive login by default, where OpenSSH prompts locally, and key login as an option. It must not capture a password, upload a public key, or modify the existing SSH config. After the operator selects a server, SSH may prompt locally for a password; never wait for the password in chat.
 3. **Present server choices and PAUSE.** Show aliases and resolved destination/user/port/status when available. Ask the operator to choose one server. **End the turn here. Do not SSH, probe Docker, or continue until the operator replies with an explicit selection.** This pause is mandatory even if there is only one reachable alias. Use the original SSH alias after confirmation so ProxyJump and other SSH config options remain effective.
 4. **After server selection, connect and discover containers.** Check Docker availability without sudo. List running containers and inspect candidates for an actual Java process; an image name alone is not evidence. Present candidate name, full container ID, image, status, and Java process identity, then **PAUSE and wait**. Do not inspect processes inside a candidate or advance to JVM discovery until the operator explicitly selects one container. Diagnose one container only.
 5. **After container selection, identify JVM candidates and PAUSE.** Detect candidate Java PIDs and their command/Jar/main class. Show the selected container ID, PID namespace context, JVM user, Java version, and process identity for each candidate, then ask which PID to use. **End the turn and wait for explicit PID confirmation**, even when there is only one candidate. Do not run compatibility checks, deploy Arthas, or attach before confirmation.
@@ -38,7 +38,7 @@ Use this skill to guide a safe, evidence-based diagnosis of one Java 8 service i
 The pauses above are control-flow requirements, not conversational suggestions. In an interactive client, ask for exactly the next required choice and stop the current response. Do not combine server, container, and PID selection into one inferred approval. Resume only after the operator answers that specific prompt. Example:
 
 ```text
-I found these SSH aliases that pass BatchMode:
+I found these configured SSH aliases (BatchMode status is shown; failure may mean interactive authentication is needed):
 - beta — deploy@10.20.1.15:22
 - staging — ops@10.20.2.18:2222
 
@@ -62,4 +62,4 @@ Which server should I use? I will wait for your selection before connecting.
 
 ## Scope of v1
 
-Supports Linux Docker Java services, SSH key-based access, one host/container/JVM per run, and Arthas as the JVM tool. It does not support bare-metal Java, Kubernetes, parallel diagnosis, automatic fixes, heap dumps, or automated production configuration changes.
+Supports Linux Docker Java services, SSH password/keyboard-interactive or key-based access, one host/container/JVM per run, and Arthas as the JVM tool. It does not support bare-metal Java, Kubernetes, parallel diagnosis, automatic fixes, heap dumps, or automated production configuration changes.

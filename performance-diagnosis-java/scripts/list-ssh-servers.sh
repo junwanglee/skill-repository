@@ -32,7 +32,7 @@ ssh -G -F "$config" '*' 2>/dev/null \
       if ssh -F "$config" -o BatchMode=yes -o ConnectTimeout=5 "$alias" 'printf SSH_OK' >/dev/null 2>&1; then
         status='passwordless-connectable'
       else
-        status='unavailable-or-interactive-auth-required'
+        status='interactive-auth-required-or-unavailable'
       fi
       printf '%s\t%s\t%s\t%s\t%s\n' "$alias" "$hostname" "$user" "$port" "$status"
     done
