@@ -32,4 +32,12 @@ scripts/list-ssh-servers.sh
 scripts/validate-target.sh --host-alias beta --container-id 0123456789ab --pid 1
 ```
 
+新增服务器时运行交互式向导，避免逐条手动输入初始化命令：
+
+```bash
+scripts/setup-ssh-server.sh
+```
+
+向导可以在本地生成 SSH key，并生成供审阅的 config 片段；不会自动修改现有 SSH config 或向远端安装公钥。详见 [`references/ssh-management.md`](references/ssh-management.md)。
+
 这些脚本不会连接或改变远端服务；列出的 SSH alias 需要再通过 batch-mode 实际连接确认。远程执行须遵循 Skill 中的逐项确认流程。

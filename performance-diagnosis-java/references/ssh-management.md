@@ -16,6 +16,14 @@ ssh -o BatchMode=yes -o ConnectTimeout=5 beta 'printf SSH_OK'
 
 ## 服务器选择与新增
 
-每次任务都要求执行人明确选择服务器，即使候选只有一个。若没有可用 alias，提供手动配置建议：检查现有 key；由执行人决定是否生成 ed25519 key；由执行人将公钥加入服务器；由执行人编辑 SSH config；再以 BatchMode 测试。不得自动生成密钥、编辑配置、执行密码登录或要求用户把密码提供给 AI。
+每次任务都要求执行人明确选择服务器，即使候选只有一个。若没有可用 alias，直接引导执行人运行仓库提供的交互式向导：
+
+```bash
+performance-diagnosis-java/scripts/setup-ssh-server.sh
+```
+
+不要让执行人逐条手动敲 `ssh-keygen`、`ssh-copy-id` 或 SSH 配置命令。向导询问 alias、主机、用户名、端口和公钥选择；可以调用本机 `ssh-keygen` 生成专用 ed25519 key，并在本地显示公钥。私钥只保留在本机。它生成独立、权限受限的配置片段供执行人审阅，但不自动改写现有 `~/.ssh/config`，也不自动把公钥上传到服务器。执行人应通过组织批准的服务器访问流程安装公钥，审阅并手动合并配置片段，再验证 Host Key 和 BatchMode 连接。
+
+向导不要求或读取密码，不关闭 Host Key 校验，不覆盖已有 alias/密钥/配置片段。若用户请求自动安装公钥，应说明需要先有经批准的远程认证方式；本向导不执行密码登录或远端 `authorized_keys` 修改。
 
 SSH 失败时记录错误并停止远端操作；检查 DNS/网络、端口、用户和 key 绑定，不要通过关闭校验或自动提权规避。

@@ -33,6 +33,14 @@ scripts/list-ssh-servers.sh
 
 `list-ssh-servers.sh` 会对 SSH config 中的普通 Host alias 使用 BatchMode 和 5 秒超时做连接验证。连接失败时请先自行修复 SSH/DNS/网络/权限问题；不要关闭 Host Key 校验绕过错误。
 
+如果尚未配置服务器，不需要逐条手动输入初始化命令，运行交互式向导：
+
+```bash
+scripts/setup-ssh-server.sh
+```
+
+向导询问连接信息，复用现有公钥或在本机生成专用 key，并输出公钥和待审阅的 SSH config 片段。它不会自动上传公钥、修改现有配置或绕过 Host Key 校验。按组织流程安装公钥、审阅并合并配置后，再运行 `scripts/list-ssh-servers.sh` 验证免密连接。
+
 ## 3. 发起一次诊断
 
 向 Agent 描述问题、目标服务和可观察到的现象。例如：
