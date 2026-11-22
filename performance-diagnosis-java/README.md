@@ -38,6 +38,6 @@ scripts/validate-target.sh --host-alias beta --container-id 0123456789ab --pid 1
 scripts/setup-ssh-server.sh
 ```
 
-向导默认支持首次交互式密码登录（密码由本地 OpenSSH 提示，不会被脚本捕获），也可选择密钥登录。它生成供审阅的 config 片段，不会自动修改现有 SSH config 或向远端安装公钥。详见 [`references/ssh-management.md`](references/ssh-management.md)。
+向导默认支持首次交互式密码登录（密码由本地 OpenSSH 提示，不会被脚本捕获），也可选择密钥登录。成功后会将新 Host 块追加到本机 `~/.ssh/config` 并保留原有内容；不会覆盖重名 alias 或自动向远端安装公钥。详见 [`references/ssh-management.md`](references/ssh-management.md)。
 
 除向导中用户主动选择的 SSH 登录测试外，辅助脚本不连接远端服务；`list-ssh-servers.sh` 的 BatchMode 检查不会输入密码。远程诊断须遵循 Skill 中的逐项确认流程。

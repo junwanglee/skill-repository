@@ -98,6 +98,12 @@ fi
 
 snippet="$ssh_dir/config.performance-diagnosis.$alias"
 [ ! -e "$snippet" ] || fail "Refusing to overwrite existing file: $snippet"
+if [ -L "$config" ]; then
+  fail "Refusing to replace symlinked SSH config: $config"
+fi
+if [ -e "$config" ] && [ ! -f "$config" ]; then
+  fail "SSH config is not a regular file: $config"
+fi
 umask 077
 {
   printf 'Host %s\n    HostName %s\n    User %s\n    Port %s\n' "$alias" "$hostname" "$username" "$port"
@@ -111,18 +117,26 @@ chmod 600 "$snippet"
 
 printf 'Created reviewable SSH config snippet: %s\n' "$snippet"
 cat "$snippet"
-printf 'Review and append it to %s; the existing config was not changed.\n' "$config"
+config_tmp=$(mktemp "$ssh_dir/config.tmp.XXXXXX")
+trap 'rm -f "$config_tmp"' EXIT
+if [ -f "$config" ]; then cat "$config" > "$config_tmp"; fi
+if [ -s "$config_tmp" ]; then printf '\n' >> "$config_tmp"; fi
+cat "$snippet" >> "$config_tmp"
+chmod 600 "$config_tmp"
+mv "$config_tmp" "$config"
+trap - EXIT
+printf 'Added Host %s to %s. Existing entries were preserved.\n' "$alias" "$config"
 if [ "$auth_mode" = password ]; then
-  printf 'Password is never read by this script. In a local terminal, SSH can prompt for it with:\n  ssh -F %s %s true\n' "$snippet" "$alias"
+  printf 'Password is never read by this script. In a local terminal, SSH can prompt for it with:\n  ssh %s true\n' "$alias"
   if [ "$interactive" -eq 1 ]; then
     read -r -p 'Try the SSH login now? [y/N]: ' try_login
-    case "$try_login" in y|Y|yes|YES) ssh -F "$snippet" -o ConnectTimeout=10 "$alias" true ;; esac
+    case "$try_login" in y|Y|yes|YES) ssh -o ConnectTimeout=10 "$alias" true ;; esac
   else
     printf '%s\n' 'No TTY detected; no connection attempted. Run the command above in a terminal to enter the password.'
   fi
 else
   printf 'Public key to install on the server (public data only):\n'
   cat "$public_key_path"
-  printf 'After installing the key and merging the config, verify with: ssh -F %s -o BatchMode=yes %s true\n' "$snippet" "$alias"
+  printf 'After installing the key on the server, verify with: ssh -o BatchMode=yes %s true\n' "$alias"
 fi
 printf '%s\n' 'Host Key checking remains enabled; verify the server fingerprint.'
