@@ -16,8 +16,9 @@
 - 本机 OpenSSH client，以及目标服务器的 SSH alias；支持本地交互式密码认证或密钥认证。
 - 远程 Linux 主机可通过该 alias 连接，且当前 SSH 用户有 Docker 只读诊断所需权限；脚本不会自动 sudo。
 - 目标容器运行 Java，且容器/JVM 满足 Arthas Attach 条件。
-- 服务器、容器、Java 服务/PID 分三次编号选择，每轮只询问当前项；PID 选择即完成目标确认，不再增加重复的第四次确认。
-- 症状只在用户未提供主症状时询问，且不与目标选择合并。
+- 先选择服务器，再选择排查方向；之后逐步选择容器、Java 服务/PID 和诊断方法。
+- 优先使用客户端原生选项控件；纯文本场景接受选项名称，不要求手动输入编号。
+- 持续采样时由执行者选择时长和间隔；L2 profiler 仍需单独明确批准。
 
 ## 安全与版本
 
@@ -55,3 +56,5 @@ Arthas L1 批处理示例（省略 `--arthas-boot` 时自动准备/复用本地�
 ```bash
 scripts/arthas-batch.sh --java /path/to/java --pid 123 --timeout 20 --commands 'dashboard -n 1;thread -n 10;jvm;memory;version'
 ```
+
+本地 Arthas 缓存位于 `~/.performance-diagnosis/arthas/versions/4.3.5/`。原始监测数据、环境记录和报告保存在 `~/.performance-diagnosis/diagnostics/<host>/<container-id>/<task-id>/`。远程临时文件放在目标主机/容器已有可写的 `/tmp/pd-<task-id>/`；开始采样前 Skill 会向执行者展示实际使用路径。

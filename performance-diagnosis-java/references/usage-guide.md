@@ -74,7 +74,7 @@ bash ~/.claude/skills/performance-diagnosis-java/scripts/setup-ssh-server.sh
 
 > 请使用 `performance-diagnosis-java` Skill，排查 beta 环境 `order-service` 的 CPU 使用率从 14:20 开始持续在 85% 以上的问题。先做低开销检查；如需 profiler，请限制在 30 秒内。不要执行会修改生产状态的操作。
 
-好的请求通常提供：
+好的请求可以提供：
 
 - SSH alias 或环境名称
 - 服务/容器名称（作为候选，不等于已确认目标）
@@ -84,7 +84,7 @@ bash ~/.claude/skills/performance-diagnosis-java/scripts/setup-ssh-server.sh
 
 不要在请求中提供密码、token、私钥或完整环境变量。首次密码认证时，密码只输入 OpenSSH 在本地终端显示的提示符，不要输入聊天框或 Skill 表单。
 
-## 4. 按步骤确认目标
+## 4. 按步骤选择
 
 ### 4.1 选择服务器
 
@@ -95,47 +95,58 @@ Agent 应列出本机 `~/.ssh/config` 中的目标，即使 Host 是 IP 也要�
 | 1 | beta | 10.20.1.15 | deploy | 22 | 未测试 |
 | 2 | staging | 10.20.2.18 | ops | 2222 | 未测试 |
 
-你明确回复：
+在支持原生选项控件的客户端中，直接点选 `beta` 或 `staging`；纯文本客户端可以回复选项名称（如“beta”），不必输入编号。
 
-> 选择 1。
+即使只有一个候选，也应明确选择。连接始终复用 alias，以保留 SSH 配置中的 ProxyJump、端口和 IdentityFile 等设置。
 
-即使只有一个候选，也应明确确认。连接始终复用 alias，以保留 SSH 配置中的 ProxyJump、端口和 IdentityFile 等设置。
+### 4.2 选择排查方向
 
-### 4.2 选择容器
+服务器选择后，Agent 再展示排查方向。若你一开始已经描述“CPU 持续偏高”，该选项会标为推荐项，但 Agent 仍应询问你是否采用，或改选其他方向：
 
-服务器确认后，Agent 先列出该主机所有运行中的容器（此时不检查容器内部进程），展示编号选项：
+- CPU 偏高
+- 接口变慢/超时
+- 内存上涨/OOM
+- GC 频繁/停顿
+- 线程阻塞/卡死
+- 不确定，先查看基线
+
+点选方向，或在纯文本客户端回复方向名称。选择后 Agent 才连接服务器。若服务器未配置，先完成 SSH 配置向导，再回到服务器选择。
+
+### 4.3 选择容器
+
+服务器确认后，Agent 先列出该主机所有运行中的容器（此时不检查容器内部进程），展示可选项：
 
 | 选项 | 容器名 | 容器 ID | 镜像 | 状态 |
 |---:|---|---|---|---|
 | 1 | order-service | `a1b2c3d4e5f6` | `company/order:2026.11` | Running |
 | 2 | billing-worker | `b2c3d4e5f6a1` | `company/billing:4.2` | Running |
 
-你明确选择一个容器：
+你选择一个容器：
 
-> 选择 1。
+> `order-service`
 
 Agent 必须等你选择后才查看该容器的进程。一次只诊断一个容器。
 
-### 4.3 确认 JVM PID
+### 4.4 选择 JVM PID
 
-选中容器后，Agent 列出其中识别到的 Java 服务/PID 作为编号选项，例如：
+选中容器后，Agent 列出其中识别到的 Java 服务/PID 作为可选项，例如：
 
 ```text
 1. order-service.jar — PID 1 — Java 1.8.0_402 — UID:GID 10001:10001
 2. metrics-agent — PID 32 — Java 1.8.0_402 — UID:GID 10001:10001
 ```
 
-Agent 展示并编号列出 Java 服务/PID。你选择后，这个选择就是目标确认；Agent 简要复述已选目标后直接做兼容性检查，不再重复询问同一组信息：
+Agent 展示 Java 服务/PID 候选。使用原生选项控件点选服务；纯文本时回复服务名或 PID。这个选择就是目标确认，Agent 简要复述目标后直接检查兼容性，不重复询问同一组信息：
 
-> 选择 1。
+> `order-service.jar`，PID 1
 
-即使只有一个 JVM，也必须显示选项并等待选择。这个 PID 选择就是目标确认；无需再对同一组目标做第四次确认。若容器重启、ID 或 PID/进程身份变化，当前任务停止并重新列出受影响阶段的选项。
+即使只有一个 JVM，也必须显示选项并等待选择。若容器重启、ID 或 PID/进程身份变化，当前任务停止并重新列出受影响阶段的选项。
 
 ### 密码输入位置
 
 密码不要发在聊天里。选择服务器后，如果 Agent 的 shell 没有 TTY，它会给出 `! ssh beta true`。在本机终端执行时，OpenSSH 会显示密码提示；直接在该提示中输入即可，输入内容通常不会回显。新建 alias 的脚本配置了短期 ControlMaster；已有 alias 需先通过 `ssh -G beta` 核实是否支持复用，否则由你在本地终端保持 master 连接。10 分钟后自动过期，诊断结束时应关闭连接。若出现 `Permission denied`，不要反复尝试；先核对用户名、密码和服务器授权，避免账号锁定。
 
-## 5. 兼容性检查与诊断计划
+## 5. 选择诊断方法、采样时长和输出位置
 
 通过兼容性检查后，若本机没有 Arthas 缓存，准备脚本会自动从官方启动地址下载 4.3.5、核对 JAR manifest 版本并缓存：
 
@@ -145,7 +156,32 @@ scripts/prepare-arthas.sh
 
 普通诊断时，`arthas-batch.sh` 在未指定 `--arthas-boot` 时会自动调用准备脚本。首次下载记录的 SHA-256 用于之后检查本地缓存是否变化，不是独立的发布者签名。
 
-Attach 前，Agent 应检查 Linux/架构、Java 版本和路径、JVM 用户、PID namespace、Attach 能力、容器资源限制，以及临时目录和报告输出能力。Attach 运行目录与报告文件目录要分开确认。
+Attach 前，Agent 应检查 Linux/架构、Java 版本和路径、JVM 用户、PID namespace、Attach 能力、容器资源限制，以及临时目录和报告输出能力。Attach 运行目录与报告文件目录要分开确认。检查后，Agent 先给出本次可选的排查方法，说明推荐项和每项可能产物，例如：
+
+| 选项 | 方法 | 适用情况 | 影响与产物 |
+|---|---|---|---|
+| L1 基线（推荐） | 低开销快照 | 先确认当前是否仍异常 | 主机/容器/JVM 快照和线程列表 |
+| L1 持续采样 | 问题间歇发生、当前快照未复现 | 周期性采集线程/CPU；按执行者选择时长和间隔 |
+| L2 profiler 火焰图 | L1 证据指向 JVM 计算热点，且采样时负载正在发生 | 有界插桩；生成 HTML 火焰图；需单独明确批准 |
+| L2 定向 trace/monitor | 已知具体类/方法，需要看耗时或调用次数 | 定向插桩；输出方法级记录；需单独明确批准 |
+
+Agent 应按症状删去不适用项或替换为对应方法（例如 GC、内存、线程分析），并给出推荐理由。你在原生选择控件中点选；纯文本时回复方法名称。方法选择本身不等于 L2 批准。
+
+选择持续采样后，Agent 分两轮询问，先选时长并暂停，再选采样间隔并暂停。建议选项：
+
+- 时长：1 分钟（推荐）、3 分钟、5 分钟、10 分钟，或在上限内自定义。
+- 间隔：5 秒、10 秒（推荐）、30 秒。
+
+L2 profiler/trace/monitor 另有单独时长选择：10 秒、20 秒（推荐）、30 秒，或自定义不超过 30 秒。时长选择后暂停；接着展示目标、方法、时长、输出路径和停止方案，再单独请求明确批准。不能把“选择某个方法”当成启动 L2 的批准。
+
+执行前，Agent 要明确展示保存位置：
+
+- Arthas 启动包缓存：`~/.performance-diagnosis/arthas/versions/4.3.5/arthas-boot.jar`
+- 本地采集数据与报告：`~/.performance-diagnosis/diagnostics/<host>/<container-id>/<task-id>/`，包括原始监测数据、`environment.md` 和 `report.md`
+- 本地任务状态记录：`~/.performance-diagnosis/tasks/<task-id>.state`
+- 远程临时文件：目标主机/容器内已存在且可写的 `/tmp/pd-<task-id>/`
+
+这些本地路径对应运行下载/采集脚本的操作者本机账户。Agent 应确认执行环境能读写该本机目录；若当前运行在隔离容器或路径映射不同，先明确实际本机落盘位置。若实际路径不同，Agent 应报出确切路径，并在开始采样前让你选择继续或取消。
 
 例如：
 
