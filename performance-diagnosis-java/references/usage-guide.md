@@ -33,13 +33,21 @@ scripts/list-ssh-servers.sh
 
 `list-ssh-servers.sh` 会对 SSH config 中的普通 Host alias 使用 BatchMode 和 5 秒超时做密钥认证检查。未通过可能表示需要交互式密码，也可能表示连接不可用；不要仅凭此结果判定服务器不可达，也不要关闭 Host Key 校验。
 
-如果尚未配置服务器，不需要逐条手动输入初始化命令，运行交互式向导：
+如果尚未配置服务器，Agent 应先在对话中依次询问：SSH alias、主机/IP、用户名、端口（默认 22）和认证方式。用户回答后，在 Agent shell 中用参数调用脚本；不要用不带参数的 `!bash` 启动交互式版本，因为 `!` 执行环境通常没有 TTY：
 
 ```bash
-scripts/setup-ssh-server.sh
+!bash ~/.claude/skills/performance-diagnosis-java/scripts/setup-ssh-server.sh --alias beta --host 10.20.1.15 --user deploy --port 22 --auth password
 ```
 
-向导询问连接信息，默认允许用本地 OpenSSH 提示符进行首次密码登录，也可选择密钥认证。密码不会进入脚本、聊天、参数或日志。向导输出待审阅的 SSH config 片段；密钥模式下显示公钥供按组织流程安装。它不会自动上传公钥、修改现有配置或绕过 Host Key 校验。审阅并合并配置后，密钥模式可用 `scripts/list-ssh-servers.sh` 验证；密码模式可在用户选择该服务器后由 SSH 在本地提示认证。
+脚本会在 `~/.ssh/config.performance-diagnosis.beta` 生成供审阅的 SSH 配置片段，不会改写现有 `~/.ssh/config`。Agent shell 没有 TTY 时，密码模式不会尝试连接；请在你自己的终端运行脚本输出的 `ssh -F ...` 命令。密码只输入 OpenSSH 本地提示符，不要提供给 Agent。若要让 alias 出现在后续服务器列表中，需将已审阅的 `Host` 片段加入 `~/.ssh/config`。密钥模式可用 `--auth key --public-key ~/.ssh/id_ed25519.pub`；脚本只显示公钥，不上传，也不读取私钥内容。
+
+如果直接在本地终端运行（有 TTY），也可不传参数启动向导：
+
+```bash
+bash ~/.claude/skills/performance-diagnosis-java/scripts/setup-ssh-server.sh
+```
+
+如果 `!bash` 不带参数运行，脚本现在会打印 `--help` 用法并明确报错，不会再无输出地退出。
 
 ## 3. 发起一次诊断
 

@@ -1,137 +1,128 @@
 #!/usr/bin/env bash
 set -eu
 
-fail() {
-  printf 'Error: %s\n' "$1" >&2
-  exit 1
+fail() { printf 'Error: %s\n' "$1" >&2; exit 1; }
+usage() {
+  cat <<'EOF'
+Usage: setup-ssh-server.sh [--alias ALIAS --host HOST --user USER [--port PORT] [--auth password|key] [--public-key FILE.pub]]
+
+With a terminal, missing values are prompted. Without a TTY, pass --alias,
+--host, and --user. Passwords are never accepted as arguments. A password
+login can only be prompted by OpenSSH in a local interactive terminal.
+
+Examples:
+  setup-ssh-server.sh --alias beta --host 10.0.0.8 --user deploy --port 22 --auth password
+  setup-ssh-server.sh --alias beta --host 10.0.0.8 --user deploy --auth key --public-key ~/.ssh/id_ed25519.pub
+EOF
 }
 
 command -v ssh >/dev/null 2>&1 || fail 'OpenSSH client is required.'
+interactive=0
+[ "$#" -eq 0 ] && [ -t 0 ] && interactive=1
+alias=
+hostname=
+username=
+port=22
+auth_mode=password
+public_key_path=
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --help|-h) usage; exit 0 ;;
+    --alias|--host|--user|--port|--auth|--public-key)
+      [ "$#" -ge 2 ] || fail "Missing value for $1"
+      option=$1; value=$2; shift 2
+      case "$option" in
+        --alias) alias=$value ;;
+        --host) hostname=$value ;;
+        --user) username=$value ;;
+        --port) port=$value ;;
+        --auth) auth_mode=$value ;;
+        --public-key) public_key_path=$value ;;
+      esac
+      ;;
+    *) fail "Unknown option: $1 (use --help)." ;;
+  esac
+done
+
+if [ "$interactive" -eq 1 ]; then
+  read -r -p 'SSH alias: ' alias
+  read -r -p 'Server hostname or IP: ' hostname
+  read -r -p 'SSH username: ' username
+  read -r -p 'SSH port [22]: ' port
+  port=${port:-22}
+  printf 'Authentication: [1] password (default), [2] public key: '
+  read -r choice
+  [ "${choice:-1}" != 2 ] || auth_mode=key
+else
+  if [ -z "$alias" ] || [ -z "$hostname" ] || [ -z "$username" ]; then
+    usage >&2
+    fail 'No TTY detected. Pass --alias, --host, and --user; nothing was configured.'
+  fi
+fi
+
+case "$alias" in ''|*[!a-zA-Z0-9_.-]*) fail 'Invalid alias; use letters, digits, dot, underscore, or hyphen.' ;; esac
+case "$hostname" in ''|*[!a-zA-Z0-9_.:-]*) fail 'Invalid hostname or IP.' ;; esac
+case "$username" in ''|*[!a-zA-Z0-9_.-]*) fail 'Invalid username.' ;; esac
+case "$port" in ''|*[!0-9]*) fail 'Port must be numeric.' ;; esac
+[ "$port" -ge 1 ] && [ "$port" -le 65535 ] || fail 'Port must be between 1 and 65535.'
+case "$auth_mode" in password|key) ;; *) fail '--auth must be password or key.' ;; esac
 
 ssh_dir=${HOME:?HOME is not set}/.ssh
 mkdir -p "$ssh_dir"
 chmod 700 "$ssh_dir"
-
-read -r -p 'SSH alias (for example, prod-app): ' alias
-case "$alias" in
-  ''|*[!a-zA-Z0-9_.-]*) fail 'Alias may contain only letters, digits, dot, underscore, and hyphen.' ;;
-esac
-
-read -r -p 'Server hostname or IP: ' hostname
-case "$hostname" in
-  ''|*[!a-zA-Z0-9_.:-]*) fail 'Hostname contains unsupported characters.' ;;
-esac
-
-read -r -p 'SSH username: ' username
-case "$username" in
-  ''|*[!a-zA-Z0-9_.-]*) fail 'Username may contain only letters, digits, dot, underscore, and hyphen.' ;;
-esac
-
-read -r -p 'SSH port [22]: ' port
-port=${port:-22}
-case "$port" in
-  ''|*[!0-9]*) fail 'Port must be numeric.' ;;
-esac
-[ "$port" -ge 1 ] && [ "$port" -le 65535 ] || fail 'Port must be between 1 and 65535.'
-
 config="$ssh_dir/config"
-if [ -f "$config" ] && awk -v alias="$alias" '
-  tolower($1) == "host" {
-    for (i = 2; i <= NF; i++) if ($i == alias) found=1
-  }
-  END { exit(found ? 0 : 1) }
-' "$config"; then
+if [ -f "$config" ] && awk -v alias="$alias" 'tolower($1)=="host" { for(i=2;i<=NF;i++) if($i==alias) found=1 } END { exit(found?0:1) }' "$config"; then
   fail "SSH alias '$alias' already exists in $config; choose another alias."
 fi
 
-printf '\nAuthentication setup:\n'
-printf '  1) Password or keyboard-interactive login (SSH prompts locally; recommended for first connection)\n'
-printf '  2) SSH public key login\n'
-read -r -p 'Choose [1/2, default 1]: ' auth_mode
-auth_mode=${auth_mode:-1}
-case "$auth_mode" in
-  1|2) ;;
-  *) fail 'Choose 1 for password login or 2 for key login.' ;;
-esac
-
 identity_file=
-public_key_path=
-if [ "$auth_mode" = 2 ]; then
+if [ "$auth_mode" = key ]; then
   command -v ssh-keygen >/dev/null 2>&1 || fail 'ssh-keygen is required for key login.'
-  printf '\nAvailable public keys (private key contents are never read):\n'
-  public_keys=()
-  for candidate in "$ssh_dir"/*.pub; do
-    [ -f "$candidate" ] || continue
-    public_keys+=("$candidate")
-    printf '  %s\n' "$candidate"
-  done
-
-  if [ "${#public_keys[@]}" -gt 0 ]; then
-    read -r -p "Public key path to use [${public_keys[0]}] (or 'new'): " public_key_path
-    public_key_path=${public_key_path:-${public_keys[0]}}
-    [ "$public_key_path" != new ] || public_key_path=
+  if [ -z "$public_key_path" ] && [ "$interactive" -eq 1 ]; then
+    printf 'Available public keys:\n'
+    for candidate in "$ssh_dir"/*.pub; do [ ! -f "$candidate" ] || printf '  %s\n' "$candidate"; done
+    read -r -p 'Public key path (.pub), or new: ' public_key_path
   fi
-
-  if [ -z "$public_key_path" ]; then
-    identity_file="$ssh_dir/id_ed25519_performance_diagnosis"
-    if [ -e "$identity_file" ] || [ -e "$identity_file.pub" ]; then
-      fail "Key path already exists: $identity_file; rerun and select its public key, or move it yourself."
-    fi
-    printf '\nThe key generator will prompt locally for a passphrase. The private key remains on this computer.\n'
+  if [ -z "$public_key_path" ] || [ "$public_key_path" = new ]; then
+    [ "$interactive" -eq 1 ] || fail 'Non-interactive key setup requires --public-key FILE.pub.'
+    identity_file="$ssh_dir/id_ed25519_performance_diagnosis_$alias"
+    [ ! -e "$identity_file" ] && [ ! -e "$identity_file.pub" ] || fail "Key path exists: $identity_file"
     ssh-keygen -t ed25519 -C "performance-diagnosis-$alias" -f "$identity_file"
     public_key_path="$identity_file.pub"
   else
-    [ -f "$public_key_path" ] || fail "Public key not found: $public_key_path"
-    case "$public_key_path" in
-      *.pub) identity_file=${public_key_path%.pub} ;;
-      *) fail 'Select a public key file ending in .pub; private keys are never accepted.' ;;
-    esac
+    case "$public_key_path" in *.pub) identity_file=${public_key_path%.pub} ;; *) fail 'Public key path must end in .pub.' ;; esac
   fi
-  [ -f "$public_key_path" ] || fail "Public key not found: $public_key_path"
-  [ -f "$identity_file" ] || fail "Matching private key file not found (its contents will not be read): $identity_file"
+  [ -f "$public_key_path" ] && [ -f "$identity_file" ] || fail 'Matching public and private key files are required.'
 fi
 
 snippet="$ssh_dir/config.performance-diagnosis.$alias"
 [ ! -e "$snippet" ] || fail "Refusing to overwrite existing file: $snippet"
 umask 077
 {
-  cat <<EOF
-Host $alias
-    HostName $hostname
-    User $username
-    Port $port
-EOF
-  if [ "$auth_mode" = 1 ]; then
-    cat <<'EOF'
-    PreferredAuthentications keyboard-interactive,password,publickey
-EOF
+  printf 'Host %s\n    HostName %s\n    User %s\n    Port %s\n' "$alias" "$hostname" "$username" "$port"
+  if [ "$auth_mode" = password ]; then
+    printf '    PreferredAuthentications keyboard-interactive,password,publickey\n'
   else
-    cat <<EOF
-    IdentityFile $identity_file
-    IdentitiesOnly yes
-EOF
+    printf '    IdentityFile %s\n    IdentitiesOnly yes\n' "$identity_file"
   fi
 } > "$snippet"
 chmod 600 "$snippet"
 
-printf '\nGenerated a reviewable SSH config snippet: %s\n' "$snippet"
+printf 'Created reviewable SSH config snippet: %s\n' "$snippet"
 cat "$snippet"
-printf '\nReview and manually append this snippet to %s. The existing config was not modified.\n' "$config"
-
-if [ "$auth_mode" = 1 ]; then
-  printf '\nPassword mode selected. The password is entered only at the local SSH prompt; this script does not read or save it.\n'
-  read -r -p 'Try an interactive SSH login now? [y/N]: ' try_login
-  case "$try_login" in
-    y|Y|yes|YES)
-      printf 'Connecting to %s@%s:%s. Verify the host fingerprint; SSH may prompt for the account password locally.\n' "$username" "$hostname" "$port"
-      ssh -o ConnectTimeout=10 -p "$port" -l "$username" "$hostname" true || fail 'SSH login failed; check the message and retry after correcting the connection details.'
-      ;;
-    *) printf '%s\n' 'No network connection attempted. After merging the snippet, connect with ssh <alias>; the local SSH prompt can request the password.' ;;
-  esac
+printf 'Review and append it to %s; the existing config was not changed.\n' "$config"
+if [ "$auth_mode" = password ]; then
+  printf 'Password is never read by this script. In a local terminal, SSH can prompt for it with:\n  ssh -F %s %s true\n' "$snippet" "$alias"
+  if [ "$interactive" -eq 1 ]; then
+    read -r -p 'Try the SSH login now? [y/N]: ' try_login
+    case "$try_login" in y|Y|yes|YES) ssh -F "$snippet" -o ConnectTimeout=10 "$alias" true ;; esac
+  else
+    printf '%s\n' 'No TTY detected; no connection attempted. Run the command above in a terminal to enter the password.'
+  fi
 else
-  printf '\nPublic key to install on the server (share only this .pub file):\n'
+  printf 'Public key to install on the server (public data only):\n'
   cat "$public_key_path"
-  printf '\nInstall the public key through your approved server access process. The private key remains on this computer.\n'
-  printf 'After key installation and config merge, verify with:\n  ssh -o BatchMode=yes -o ConnectTimeout=5 %s true\n' "$alias"
+  printf 'After installing the key and merging the config, verify with: ssh -F %s -o BatchMode=yes %s true\n' "$snippet" "$alias"
 fi
-printf 'Host Key checking remains enabled; verify the server fingerprint through your normal process.\n'
+printf '%s\n' 'Host Key checking remains enabled; verify the server fingerprint.'

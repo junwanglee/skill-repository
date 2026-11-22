@@ -16,13 +16,13 @@ BatchMode 成功表示当前密钥/agent 可用；失败也可能只是需要交
 
 ## 服务器选择与新增
 
-每次任务都要求执行人明确选择服务器，即使候选只有一个。若没有可用 alias，直接引导执行人运行仓库提供的交互式向导：
+每次任务都要求执行人明确选择服务器，即使候选只有一个。若没有可用 alias，Agent 在对话中逐项收集 alias、主机/IP、用户名、端口和认证方式，然后用参数调用向导；不要让用户猜脚本提示，也不要在 Agent 的无 TTY shell 中运行裸交互脚本：
 
 ```bash
-performance-diagnosis-java/scripts/setup-ssh-server.sh
+performance-diagnosis-java/scripts/setup-ssh-server.sh --alias beta --host 10.20.1.15 --user deploy --port 22 --auth password
 ```
 
-不要让执行人逐条手动敲初始化命令。向导询问 alias、主机、用户名、端口和认证方式。默认密码/keyboard-interactive 模式可以选择立即试连，由本地 OpenSSH 提示输入密码；密码不经过脚本输入、参数、日志或文件。配置片段供执行人审阅，不自动改写现有 `~/.ssh/config`。也可以选择 key 模式：本地调用 `ssh-keygen` 生成专用 ed25519 key 或复用现有 key，私钥只保留在本机；脚本显示 `.pub` 公钥供执行人按组织流程安装，不自动上传。
+脚本支持有 TTY 的本地交互模式，也支持上述非交互参数模式。缺少 TTY 且缺少必要参数时会输出用法并报错，不会静默退出。密码/keyboard-interactive 模式会生成独立配置片段，但密码不经脚本输入、参数、日志或文件；如执行环境没有 TTY，用户需在自己的终端运行脚本给出的 `ssh -F <snippet> <alias> true` 命令并在 OpenSSH 提示符输入密码。配置片段由脚本生成供审阅，不自动改写现有 `~/.ssh/config`。key 模式支持 `--public-key ~/.ssh/id_ed25519.pub`；有 TTY 时也可以由本机调用 `ssh-keygen` 生成专用 key。私钥只保留在本机，脚本显示 `.pub` 公钥供执行人按组织流程安装，不自动上传。
 
 向导不捕获或保存密码，不关闭 Host Key 校验，不覆盖已有 alias/密钥/配置片段。交互密码仅由 OpenSSH 客户端直接接收。向导不执行远端 `authorized_keys` 修改。
 
