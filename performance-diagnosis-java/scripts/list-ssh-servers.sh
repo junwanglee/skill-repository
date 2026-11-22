@@ -1,38 +1,45 @@
 #!/usr/bin/env bash
 set -eu
 
-if ! command -v ssh >/dev/null 2>&1; then
-  printf '%s\n' 'ssh client: missing' >&2
-  exit 1
-fi
-
+command -v ssh >/dev/null 2>&1 || { printf '%s\n' 'ssh client: missing' >&2; exit 1; }
 config=${HOME:?HOME is not set}/.ssh/config
 if [ ! -r "$config" ]; then
-  printf 'SSH config is not readable: %s\n' "$config" >&2
-  exit 1
+  printf 'SSH config is missing or unreadable: %s\n' "$config"
+  exit 0
 fi
 
-ssh -G -F "$config" '*' 2>/dev/null \
-  | awk '
-      /^host / { host=$2; next }
-      /^hostname / { hostname=$2 }
-      /^user / { user=$2 }
-      /^port / { port=$2 }
-      /^$/ {
-        if (host != "" && host !~ /[?*!]/ && host != "none")
-          printf "%s\t%s\t%s\t%s\n", host, hostname, user, port
-        host=hostname=user=port=""
-      }
-      END {
-        if (host != "" && host !~ /[?*!]/ && host != "none")
-          printf "%s\t%s\t%s\t%s\n", host, hostname, user, port
-      }
-    ' | while IFS="$(printf '\t')" read -r alias hostname user port; do
-      [ -n "$alias" ] || continue
-      if ssh -F "$config" -o BatchMode=yes -o ConnectTimeout=5 "$alias" 'printf SSH_OK' >/dev/null 2>&1; then
-        status='passwordless-connectable'
-      else
-        status='interactive-auth-required-or-unavailable'
-      fi
-      printf '%s\t%s\t%s\t%s\t%s\n' "$alias" "$hostname" "$user" "$port" "$status"
-    done
+aliases=$(awk '
+  tolower($1) == "host" {
+    for (i=2; i<=NF; i++) {
+      name=$i
+      if (name !~ /[?*!]/ && name != "none" && !seen[name]++) print name
+    }
+  }
+' "$config")
+
+if [ -z "$aliases" ]; then
+  printf 'No literal SSH Host aliases found in %s. Wildcard-only Host blocks are not selectable targets.\n' "$config"
+  exit 0
+fi
+
+printf 'ALIAS\tHOST\tUSER\tPORT\tSTATUS\n'
+printf '%s\n' "$aliases" | while IFS= read -r alias; do
+  case "$alias" in ''|*[!a-zA-Z0-9_.-]*) continue ;; esac
+  resolved=$(ssh -G -F "$config" "$alias" 2>/dev/null || true)
+  [ -n "$resolved" ] || {
+    printf '%s\t?\t?\t?\tconfig-error\n' "$alias"
+    continue
+  }
+  details=$(printf '%s\n' "$resolved" | awk '
+    $1 == "hostname" { host=$2 }
+    $1 == "user" { user=$2 }
+    $1 == "port" { port=$2 }
+    END { printf "%s\t%s\t%s", host, user, port }
+  ')
+  if ssh -F "$config" -o BatchMode=yes -o ConnectTimeout=5 "$alias" true >/dev/null 2>&1; then
+    status=passwordless-connectable
+  else
+    status=interactive-auth-required-or-unavailable
+  fi
+  printf '%s\t%s\t%s\t%s\t%s\n' "$alias" "$details" "$status"
+done

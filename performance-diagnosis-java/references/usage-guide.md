@@ -73,51 +73,52 @@ bash ~/.claude/skills/performance-diagnosis-java/scripts/setup-ssh-server.sh
 
 ### 4.1 选择服务器
 
-Agent 应列出实际可用的 SSH alias，例如：
+Agent 应列出本机 `~/.ssh/config` 中的目标，即使 Host 是 IP 也要作为可选项，例如：
 
 | Alias | Host | User | Port | 连通状态 |
 |---|---|---|---:|---|
-| beta | 10.20.1.15 | deploy | 22 | BatchMode 可连接 |
-| staging | 10.20.2.18 | ops | 2222 | BatchMode 可连接 |
+| 选项 | Alias | Host | User | Port | 状态 |
+|---:|---|---|---|---:|---|
+| 1 | beta | 10.20.1.15 | deploy | 22 | 密钥可连接 |
+| 2 | staging | 10.20.2.18 | ops | 2222 | 需要交互认证或暂不可达 |
 
 你明确回复：
 
-> 确认使用 beta。
+> 选择 1。
 
 即使只有一个候选，也应明确确认。连接始终复用 alias，以保留 SSH 配置中的 ProxyJump、端口和 IdentityFile 等设置。
 
 ### 4.2 选择容器
 
-Agent 查询运行容器并检查实际 Java 进程后，展示类似信息：
+服务器确认后，Agent 先列出该主机所有运行中的容器（此时不检查容器内部进程），展示编号选项：
 
-| 容器名 | 容器 ID | 镜像 | Java 进程 | 状态 |
-|---|---|---|---|---|
-| order-service | `a1b2c3d4e5f6` | `company/order:2026.11` | `order-service.jar` | Running |
-| billing-worker | `b2c3d4e5f6a1` | `company/billing:4.2` | `billing.jar` | Running |
+| 选项 | 容器名 | 容器 ID | 镜像 | 状态 |
+|---:|---|---|---|---|
+| 1 | order-service | `a1b2c3d4e5f6` | `company/order:2026.11` | Running |
+| 2 | billing-worker | `b2c3d4e5f6a1` | `company/billing:4.2` | Running |
 
 你明确选择一个容器：
 
-> 确认诊断 `order-service`，容器 ID `a1b2c3d4e5f6`。
+> 选择 1。
 
-镜像名称包含 Java 字样不能作为 Java 容器的判断依据；一次只诊断一个容器。
+Agent 必须等你选择后才查看该容器的进程。一次只诊断一个容器。
 
 ### 4.3 确认 JVM PID
 
-Agent 识别进程后应展示进程身份，例如：
+选中容器后，Agent 列出其中识别到的 Java 服务/PID 作为编号选项，例如：
 
 ```text
-容器：order-service / a1b2c3d4e5f6
-容器内 PID：1
-Java：1.8.0_402
-用户：10001:10001
-进程：/opt/java/bin/java -jar /app/order-service.jar
+1. order-service.jar — PID 1 — Java 1.8.0_402 — UID:GID 10001:10001
+2. metrics-agent — PID 32 — Java 1.8.0_402 — UID:GID 10001:10001
 ```
 
-你确认：
+你选择后，Agent 单独复述服务器、容器 ID、服务和 PID，再请求最终确认。只有收到确认才进行兼容性检查：
 
-> 确认目标是容器 `a1b2c3d4e5f6` 内 PID 1 的 `order-service.jar`。
+> 选择 1。
+>
+> 请确认目标：beta / order-service (`a1b2c3d4e5f6`) / `order-service.jar` / PID 1。
 
-多 JVM 时逐项展示候选并由你选择。即使只发现一个 JVM，也要确认。若容器重启、ID 或 PID/进程身份变化，当前任务停止并重新确认。
+再回复“确认”后才继续。即使只有一个 JVM，也必须显示选项并等待选择，再展示最终目标等待确认。若容器重启、ID 或 PID/进程身份变化，当前任务停止并重新确认。
 
 ## 5. 兼容性检查与诊断计划
 
