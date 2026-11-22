@@ -28,6 +28,22 @@ scripts/arthas-batch.sh --java /path/to/java --pid 123 --timeout 20 --commands '
 
 底层等价形式为 `java -jar arthas-boot.jar -f commands.as <pid>`。批处理正常退出后仍需对本次 Arthas 会话执行 `stop`，并确认会话退出；进程超时退出不等同于已验证清理。
 
+## CPU Profiler 有效性保护
+
+不要用 Agent 临时拼接的同一批命令完成 profiler start/wait/stop。将 `scripts/arthas-profiler.sh` 与已校验的 Arthas JAR 一起放入目标容器任务目录，再以容器中 Java 的实际路径执行。示例（占位值需替换为已核实路径）：
+
+```bash
+bash /tmp/pd-<task-id>/arthas-profiler.sh \
+  --java /opt/java/openjdk/bin/java \
+  --arthas-boot /tmp/pd-<task-id>/arthas-boot.jar \
+  --pid 1 --duration 20 --interval-ns 20000000 \
+  --format md \
+  --output /tmp/pd-<task-id>/profile.md \
+  --evidence-dir /tmp/pd-<task-id>
+```
+
+脚本以分开的 Arthas 调用启动、轮询状态和样本数、等待完整时长、停止并导出；样本数为 0、状态无法确认或产物无效时返回非零并保留失败证据。由调用方（例如 `docker exec`）按所选时长加合理余量设置外层超时。调用方必须检查退出码；非零时不得继续做热点分析。脚本只负责 profiler 生命周期和产物校验，不负责服务器/容器选择、L2 风险确认或授权判断。
+
 ## 任务生命周期
 
 持续采样须有任务 ID、目标 PID、开始/截止时间和状态。通过 `scripts/arthas-task.sh init/status/finish` 在本机 `~/.performance-diagnosis/tasks/` 维护权限为 700/600 的任务台账。开始前查询所有未完成任务；会话中断后先查询台账和远端任务状态，不盲目重复启动。CPU profiler 默认间隔为 10 ms，可选 20/50 ms；总时长默认 20 秒、执行者可选最长 300 秒（5 分钟），单次任务不得拆段绕过上限。目标容器内存使用达到限制的 80% 或近期 OOM 时默认不运行 L2；若执行者选择强制启用，须单独确认该次风险与操作，并将证据和风险接受写入台账/报告。结束后发送 Arthas profiler stop（如适用）和 Arthas `stop`，验证任务已停止再标记完成。只清理该任务创建的文件。确认本地回传哈希一致后才清远端副本；回传失败保留远端文件并记录恢复步骤。
