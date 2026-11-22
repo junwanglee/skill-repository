@@ -30,7 +30,7 @@ scripts/arthas-batch.sh --java /path/to/java --pid 123 --timeout 20 --commands '
 
 ## 任务生命周期
 
-持续采样须有任务 ID、目标 PID、开始/截止时间和状态。通过 `scripts/arthas-task.sh init/status/finish` 在本机 `~/.performance-diagnosis/tasks/` 维护权限为 700/600 的任务台账。开始前查询所有未完成任务；会话中断后先查询台账和远端任务状态，不盲目重复启动。CPU profiler 默认间隔为 10 ms，可选 20/50 ms；总时长默认 20 秒且最多 30 秒。目标容器内存使用达到限制的 80% 或近期 OOM 时不执行 L2。结束后发送 Arthas profiler stop（如适用）和 Arthas `stop`，验证任务已停止再标记完成。只清理该任务创建的文件。确认本地回传哈希一致后才清远端副本；回传失败保留远端文件并记录恢复步骤。
+持续采样须有任务 ID、目标 PID、开始/截止时间和状态。通过 `scripts/arthas-task.sh init/status/finish` 在本机 `~/.performance-diagnosis/tasks/` 维护权限为 700/600 的任务台账。开始前查询所有未完成任务；会话中断后先查询台账和远端任务状态，不盲目重复启动。CPU profiler 默认间隔为 10 ms，可选 20/50 ms；总时长默认 20 秒、执行者可选最长 300 秒（5 分钟），单次任务不得拆段绕过上限。目标容器内存使用达到限制的 80% 或近期 OOM 时不执行 L2。结束后发送 Arthas profiler stop（如适用）和 Arthas `stop`，验证任务已停止再标记完成。只清理该任务创建的文件。确认本地回传哈希一致后才清远端副本；回传失败保留远端文件并记录恢复步骤。
 
 任务台账是本地恢复索引，不会自动探测远端进程。若 SSH 中断后无法安全确认远程状态，暂停新采样并要求操作者恢复连接检查；不得仅凭本地状态执行 kill。
 
