@@ -26,6 +26,7 @@
 选择与任务匹配的 Skill，先阅读其 `SKILL.md`，再按文档中的工作流执行。各 Skill 的 `README.md` 说明适用范围、前置条件和辅助文件。`references/` 中的内容用于补充具体步骤，`templates/` 用于统一结果格式。
 
 当前 Java 性能诊断 Skill 的详细说明见 [`performance-diagnosis-java/README.md`](performance-diagnosis-java/README.md)。
+使用步骤与完整示例见 [`performance-diagnosis-java/references/usage-guide.md`](performance-diagnosis-java/references/usage-guide.md)，原始设计方案见 [`performance-diagnosis-java/docs/design.md`](performance-diagnosis-java/docs/design.md)。
 
 ## 安全原则
 

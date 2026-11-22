@@ -8,6 +8,8 @@
 - `references/`：SSH/Docker/JVM 兼容性、Arthas 部署、分症状诊断与安全规范。
 - `scripts/`：只读的本地 SSH 检查和输入校验辅助脚本。
 - `templates/`：环境记录和最终报告模板。
+- `references/usage-guide.md`：带端到端示例的使用教程，供 Agent 按需加载。
+- `docs/design.md`：项目原始详细设计方案，仅作设计背景和追溯依据。
 
 ## 前置条件
 

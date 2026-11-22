@@ -44,6 +44,7 @@ Use this skill to guide a safe, evidence-based diagnosis of one Java 8 service i
 - Compatibility, deployment and command policy: `references/java-compatibility.md`, `references/arthas-deployment.md`, `references/arthas-command-reference.md`, `references/security-policy.md`
 - Symptom strategies: `references/cpu-diagnosis.md`, `references/interface-diagnosis.md`, `references/memory-diagnosis.md`, `references/gc-diagnosis.md`, `references/thread-diagnosis.md`
 - Output: `references/report-template.md`, `templates/environment-report.md`, `templates/performance-report.md`
+- End-to-end usage example: read `references/usage-guide.md` when the operator needs onboarding or a worked example; it supplements, but does not override, the safety rules in this file.
 - Optional local checks: `scripts/`
 
 ## Scope of v1
