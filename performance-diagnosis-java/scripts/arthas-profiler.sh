@@ -61,8 +61,8 @@ started=0
 finished=0
 
 run_arthas() {
-  local commands_file=$1 log_file=$2
-  timeout --signal=TERM --kill-after=2 20 "$java" -jar "$boot" -f "$commands_file" "$pid" >"$log_file" 2>&1
+  local commands_file=$1 log_file=$2 call_timeout=${3:-20}
+  timeout --signal=TERM --kill-after=2 "$call_timeout" "$java" -jar "$boot" -f "$commands_file" "$pid" >"$log_file" 2>&1
 }
 write_command() {
   local path=$1 command=$2
@@ -89,7 +89,7 @@ save_failure() {
 cleanup_on_error() {
   local code=$?
   if [ "$started" -eq 1 ] && [ "$finished" -eq 0 ]; then
-    write_command "$stop_file" 'profiler stop'
+    write_command "$stop_file" "profiler stop --format $format --file $evidence_dir/profile-cleanup.$format"
     "$java" -jar "$boot" -f "$stop_file" "$pid" >"$evidence_dir/profiler-cleanup.log" 2>&1 || true
   fi
   exit "$code"
@@ -144,9 +144,19 @@ fi
 
 printf '阶段 3/4：停止采样并导出 %s。样本数：%s。\n' "$format" "$samples"
 write_command "$stop_file" "profiler stop --format $format --file $output"
-if ! run_arthas "$stop_file" "$stop_log"; then
-  save_failure 'Profiler 停止或导出命令失败。' "$samples"
-  printf '采集失败：停止/导出失败，日志保存在 %s。\n' "$evidence_dir" >&2
+stop_rc=0
+run_arthas "$stop_file" "$stop_log" 120 || stop_rc=$?
+
+printf '阶段 4/4：确认采样结束及产物有效。\n'
+write_command "$status_file" 'profiler status'
+if ! run_arthas "$status_file" "$status_log"; then
+  save_failure '停止/导出后无法确认 profiler 状态。' "$samples"
+  printf '采集失败：无法确认 profiler 停止状态；日志和已有产物均已保留。\n' >&2
+  exit 1
+fi
+if grep -Eiq 'profiling is running|正在采样' "$status_log"; then
+  save_failure '停止/导出后 profiler 仍处于运行状态。' "$samples"
+  printf '采集失败：导出后 profiler 仍在运行。\n' >&2
   exit 1
 fi
 finished=1
@@ -168,26 +178,21 @@ if [ "$format" = html ] && ! grep -Eiq 'flame|profile|cpool|frames' "$output"; t
   exit 1
 fi
 
-printf '阶段 4/4：确认采样结束及产物有效。\n'
-write_command "$status_file" 'profiler status'
-if ! run_arthas "$status_file" "$status_log"; then
-  save_failure '导出后无法确认 profiler 已停止。' "$samples"
-  printf '采集失败：无法确认 profiler 停止状态。\n' >&2
-  exit 1
-fi
-if grep -Eiq 'profiling is running|正在采样' "$status_log"; then
-  save_failure '导出后 profiler 仍处于运行状态。' "$samples"
-  printf '采集失败：导出后 profiler 仍在运行。\n' >&2
-  exit 1
-fi
-
-trap - EXIT
 {
   printf 'pid=%s\n' "$pid"
   printf 'requested_duration_seconds=%s\n' "$duration"
   printf 'sampling_interval_ns=%s\n' "$interval"
   printf 'observed_samples=%s\n' "$samples"
   printf 'artifact=%s\n' "$output"
+  printf 'export_client_exit_code=%s\n' "$stop_rc"
+  if [ "$stop_rc" -ne 0 ]; then
+    printf 'note=export client timed out/failed; artifact and stopped state independently validated\n'
+  fi
 } > "$evidence_dir/profile-result.txt"
 chmod 600 "$evidence_dir/profile-result.txt"
-printf '采集成功：样本数 %s；输出文件 %s。\n' "$samples" "$output"
+trap - EXIT
+if [ "$stop_rc" -ne 0 ]; then
+  printf '采集成功但导出客户端返回码为 %s；已独立确认 profiler 已停止、样本数 %s 且产物有效。请检查原始导出日志。\n' "$stop_rc" "$samples"
+else
+  printf '采集成功：样本数 %s；输出文件 %s。\n' "$samples" "$output"
+fi
