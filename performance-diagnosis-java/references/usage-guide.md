@@ -176,7 +176,7 @@ CPU profiler 的默认采样间隔是 10 ms（每秒约 100 次采样），与�
 
 Arthas 默认生成 HTML 火焰图，因为它便于浏览器交互查看。Arthas 4.3.5 也支持 `profiler stop --format md` 生成包含热点和调用树的 Markdown，便于 AI 分析。默认优先选择 Markdown；若固定版本能从同一份采样数据安全导出两种格式，可同时保存 Markdown 与 HTML。一个 profiler 任务只能停止/导出一次，不能为了第二种格式重新采样。输出前核验 Arthas 4.3.5 实际支持的格式参数。
 
-若容器内存已用达到限制的 80%，或近期发生 OOM，Agent 不提供 L2 profiler 选项，改为 L1 或建议等资源回落后再采。Profiler 不与重复 dashboard 采集并行运行。
+若主机或目标容器近期发生 OOM，或目标容器当前内存使用达到 limit 的 80%，默认推荐不运行任何 L2（profiler/trace/watch/monitor），改为 L1 只读检查或等待风险条件解除后重新检查。同时提供“强制启用 L2（承担风险）”选项。选择后，Agent 必须展示实际 OOM/内存证据、具体操作、目标、时长/次数和停止方案，并在单独一轮请求执行者明确确认；普通的“批准 profiler”不等同于风险确认。确认后严格遵守批准范围，并将风险接受、证据及结果记入台账和报告。不得将其描述为消除了风险。Profiler 不与重复 dashboard 采集并行运行。
 
 执行前，Agent 要明确展示保存位置：
 
